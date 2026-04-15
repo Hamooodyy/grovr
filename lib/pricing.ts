@@ -24,8 +24,8 @@ export function compareRetailerPrices(
 }
 
 /**
- * Returns the single lowest-cost retailer from a sorted or unsorted list of
- * comparisons. Throws if the list is empty.
+ * Returns the lowest-cost retailer. Expects the sorted output of
+ * compareRetailerPrices — comparisons[0] is always cheapest.
  */
 export function findCheapestRetailer(
   comparisons: PriceComparison[]
@@ -34,7 +34,5 @@ export function findCheapestRetailer(
     throw new Error("No retailer comparisons provided");
   }
 
-  return comparisons.reduce((cheapest, current) =>
-    current.subtotal < cheapest.subtotal ? current : cheapest
-  );
+  return comparisons[0];
 }
