@@ -185,6 +185,8 @@ Build `lib/pricing.ts`:
 - Cache responses with max TTL of 1 hour
 - **Blocked on:** `FOODSPARK_API_KEY` for live calls; stub returns mock data until then
 
+> **Open question (resolve in Phase 7):** Does Foodspark support a multi-retailer search in a single call, or is it strictly one retailer per call? The current stub design fires one call per item per retailer (N items × M retailers). If Foodspark is per-call only, cap the retailer list to 3–5 nearest stores to control cost. If a multi-retailer endpoint exists, refactor `searchProduct` to use it.
+
 ---
 
 ### Phase 5 — API Routes
