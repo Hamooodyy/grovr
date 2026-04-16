@@ -10,6 +10,7 @@ export interface ProductMatch {
   matchedName: string;
   price: number;
   retailerId: string;
+  upc?: string;
 }
 
 export interface Retailer {

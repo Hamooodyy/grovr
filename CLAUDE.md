@@ -1,41 +1,41 @@
 # CLAUDE.md - MVP Project Constitution
 
 ## 🎯 Project Goal
-Build a functional MVP for Grovr focusing on pricing analysis and order placement via Instacart.
+Build a functional MVP for Grovr focusing on pricing analysis and order placement via the Kroger API.
 **Objective:** Launch quickly, prioritize functionality over perfect code, maintain a simple architecture.
 
 ## 🛒 Core User Flow
 1. User signs up or logs in via Clerk
-2. User builds a grocery list (text input, one item at a time)
-3. App matches each item to products available on Instacart
-4. App fetches nearby retailers via Instacart IDP and calculates an estimated item subtotal for the full list at each store using Foodspark pricing data
-5. App surfaces the lowest-cost retailer option to the user
-6. User is sent to Instacart (via IDP handoff link) to complete the order at the recommended store
+2. User builds a grocery list (text input, one item at a time) and enters their ZIP code
+3. App fetches nearby Kroger-family stores (Kroger, Ralphs, Fred Meyer, Harris Teeter, etc.) via the Kroger Locations API
+4. App searches each item at each nearby store via the Kroger Products API and retrieves real-time prices
+5. App computes estimated subtotals per store and surfaces the lowest-cost option to the user
+6. User authorizes Kroger via OAuth and items are added directly to their Kroger cart
 
-> **Key distinction:** The user does not pick a retailer. The app compares estimated prices across nearby retailers and recommends the cheapest one automatically.
+> **MVP scope:** Price comparison is limited to Kroger-family stores. Multi-chain comparison (e.g. Kroger vs. Safeway) is out of scope until a second retailer API is integrated.
 
 ## 🛠 Tech Stack
 - **Framework:** Next.js 15
 - **Language:** TypeScript (Strict Mode)
 - **Styling:** Tailwind CSS
 - **Authentication:** Clerk (`@clerk/nextjs`) — use pre-built UI components, do not build custom auth forms
-- **Pricing Data:** Foodspark API — scrapes Instacart storefront prices directly, ensuring displayed prices match what users see on Instacart at checkout
+- **Pricing & Retail Data:** Kroger Developer API — official public API, free tier, returns real-time product prices per store location
+- **Cart Handoff:** Kroger Cart API (OAuth `authorization_code` flow) — items land directly in the user's Kroger cart
 - **Database/Backend:** TBD — do not integrate a database until one is determined necessary for the MVP
 - **Deployment:** Vercel
 
 ## 💰 Pricing Strategy
-- **Source:** Foodspark API, which scrapes Instacart's own storefront prices (standard + discounted)
-- **Why Foodspark:** Since prices are sourced from Instacart's storefront directly, displayed estimates reflect the same prices users will see after the handoff — best achievable accuracy without direct API access
+- **Source:** Kroger Products API — real-time prices scoped to a specific store location ID
+- **Promo prices:** API returns both `regular` and `promo` price; always display promo when present
 - **What we display:** Item subtotal estimate only — do not imply the total includes delivery fees, service fees, or taxes
-- **Cache TTL:** Keep Foodspark price data cached for no more than 1–2 hours to reduce staleness
+- **Cache TTL:** Cache Kroger product prices for no more than 1 hour
 - **Known gaps and how to handle them:**
   - Prices can shift between lookup and checkout → covered by disclaimer
-  - Promotions may expire → show discounted price but note sales may vary
-  - Delivery/service fees are not included in the estimate → make this explicit in UI copy
-  - Item availability can change → Instacart handles substitution, not our responsibility
+  - Item availability can change → Kroger handles substitution at checkout
+  - Delivery/service fees not included → make this explicit in UI copy
 
 - **Required disclaimer (display alongside every price):**
-  > "Estimated subtotal based on current Instacart listed prices. Final total including fees and promotions may vary."
+  > "Estimated subtotal based on current Kroger listed prices. Final total including fees and promotions may vary."
 
 ## 🔑 Environment Variables
 ```bash
@@ -47,15 +47,13 @@ NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard
 NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
 
-# Instacart IDP
-INSTACART_API_KEY=
-INSTACART_BASE_URL=https://connect.dev.instacart.tools  # swap for prod
-
-# Foodspark
-FOODSPARK_API_KEY=
+# Kroger
+KROGER_CLIENT_ID=
+KROGER_CLIENT_SECRET=
+KROGER_REDIRECT_URI=http://localhost:3000/api/auth/kroger/callback  # update for prod
 ```
 
-> `CLERK_SECRET_KEY`, `INSTACART_API_KEY`, and `FOODSPARK_API_KEY` must never be exposed client-side. All calls to Instacart and Foodspark go through Next.js API routes. Only `NEXT_PUBLIC_` prefixed variables are safe to use in client components.
+> `CLERK_SECRET_KEY`, `KROGER_CLIENT_ID`, and `KROGER_CLIENT_SECRET` must never be exposed client-side. All calls to Kroger go through Next.js API routes. Only `NEXT_PUBLIC_` prefixed variables are safe to use in client components.
 
 ## 🚀 MVP Scope & Rules
 1. **Do Not Over-engineer:** Keep files small and focused.
@@ -72,17 +70,18 @@ FOODSPARK_API_KEY=
   /dashboard
     /page.tsx                      — Shopping list UI (Clerk-protected)
   /api
-    /products
-      /route.ts                    — Product matching logic
-    /retailers
-      /route.ts                    — Proxy Instacart IDP retailer lookup
+    /stores
+      /route.ts                    — Proxy Kroger Locations API (nearby stores by ZIP)
     /pricing
-      /route.ts                    — Foodspark price lookup per product/retailer
-    /list
-      /route.ts                    — Generate Instacart handoff link via IDP
+      /route.ts                    — Kroger Products API lookup per item + store
+    /cart
+      /route.ts                    — Add items to user's Kroger cart (requires user token)
+    /auth
+      /kroger
+        /callback
+          /route.ts                — Kroger OAuth callback — exchange code for user token
 /lib
-  /instacart.ts                    — Instacart IDP client (API key auth, fetch wrappers)
-  /foodspark.ts                    — Foodspark API client (price lookups)
+  /kroger.ts                       — Kroger API client (Locations, Products, Cart, OAuth)
   /pricing.ts                      — Compare retailer totals, select lowest-cost option
   /types.ts                        — Shared TypeScript types
 /components
@@ -110,14 +109,12 @@ FOODSPARK_API_KEY=
 | Service | Purpose | Status | Where to store |
 |---|---|---|---|
 | **Clerk** | App auth (sign-up, sign-in, session) | ✅ Keys in `.env.local` | `.env.local` (dev) / Vercel env vars (prod) |
-| **Instacart IDP** | Retailer lookup + handoff link | ⏳ Pending approval | `.env.local` → `INSTACART_API_KEY` |
-| **Foodspark** | Product search + price data | ⏳ Pending approval | `.env.local` → `FOODSPARK_API_KEY` |
+| **Kroger** | Store lookup, product pricing, cart handoff | ✅ Client ID + Secret obtained | `.env.local` → `KROGER_CLIENT_ID` / `KROGER_CLIENT_SECRET` |
 
 **Rules:**
-- `CLERK_SECRET_KEY`, `INSTACART_API_KEY`, `FOODSPARK_API_KEY` are server-only — never use in client components
+- `CLERK_SECRET_KEY`, `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET` are server-only — never use in client components
 - Only `NEXT_PUBLIC_*` variables are safe client-side
-- All Instacart and Foodspark calls go through `/app/api/` routes exclusively
-- Swap `INSTACART_BASE_URL` from `connect.dev.instacart.tools` to `connect.instacart.com` when production key is approved
+- All Kroger API calls go through `/app/api/` routes exclusively
 
 ---
 
@@ -170,32 +167,33 @@ Build `lib/pricing.ts`:
 
 ---
 
-### Phase 4 — API Client Stubs
+### Phase 4 — API Client (`lib/kroger.ts`)
 **Dependencies:** `lib/types.ts`
-**Can build now:** Yes (stubbed) — swap mocks for real calls when keys arrive
+**Status:** ✅ Done — stubs return mock data, real calls fire when `KROGER_CLIENT_ID` is set
 
-**`lib/instacart.ts`:**
-- `getRetailers(postalCode: string): Promise<Retailer[]>` — `GET /idp/v1/retailers`
-- `createRecipeLink(title: string, lineItems: GroceryItem[]): Promise<string>` — `POST /idp/v1/products/recipe`, returns handoff URL
-- Auth: `Authorization: Bearer {INSTACART_API_KEY}` on all requests
-- **Blocked on:** `INSTACART_API_KEY` for live calls; stub returns mock data until then
+**Functions:**
+- `getNearbyStores(zipCode)` — Kroger Locations API, returns up to 5 nearby stores
+- `searchProduct(item, locationId)` — Kroger Products API, returns best match + price (promo preferred); cached 1 hour
+- `getKrogerAuthUrl()` — builds OAuth authorization URL for `cart.basic:write`
+- `exchangeCodeForUserToken(code)` — exchanges authorization code for user access token
+- `addToCart(userToken, items)` — `PUT /v1/cart/add` with user's access token
 
-**`lib/foodspark.ts`:**
-- `searchProduct(query: string, retailerId: string): Promise<ProductMatch>` — returns best match + price
-- Cache responses with max TTL of 1 hour
-- **Blocked on:** `FOODSPARK_API_KEY` for live calls; stub returns mock data until then
+**Auth model:**
+- Locations + Products: `client_credentials` (server-to-server, no user needed)
+- Cart: `authorization_code` (user must authorize via Kroger OAuth)
 
-> **Open question (resolve in Phase 7):** Does Foodspark support a multi-retailer search in a single call, or is it strictly one retailer per call? The current stub design fires one call per item per retailer (N items × M retailers). If Foodspark is per-call only, cap the retailer list to 3–5 nearest stores to control cost. If a multi-retailer endpoint exists, refactor `searchProduct` to use it.
+> **Call volume:** N items × M stores per "Find Prices" action. Cap stores at 5 to control API usage. Kroger free tier allows 10,000 product requests/day.
 
 ---
 
 ### Phase 5 — API Routes
-**Dependencies:** Phase 4 client stubs
-**Can build now:** Yes (returns mock data until keys arrive)
+**Dependencies:** Phase 4 (`lib/kroger.ts`)
+**Can build now:** Yes
 
-- `app/api/retailers/route.ts` — accepts `?postal_code=`, calls `getRetailers()`, returns retailer list
-- `app/api/pricing/route.ts` — accepts item name + retailer ID, calls `searchProduct()`, returns match + price
-- `app/api/list/route.ts` — accepts list items, calls `createRecipeLink()`, returns handoff URL
+- `app/api/stores/route.ts` — accepts `?zip=`, calls `getNearbyStores()`, returns store list
+- `app/api/pricing/route.ts` — accepts item list + store IDs, calls `searchProduct()` per item/store, returns `PriceComparison[]`
+- `app/api/cart/route.ts` — accepts items + user token, calls `addToCart()`
+- `app/api/auth/kroger/callback/route.ts` — receives OAuth code, calls `exchangeCodeForUserToken()`, stores token in session
 
 ---
 
@@ -207,36 +205,36 @@ Build `lib/pricing.ts`:
 - Text input, add item on Enter
 - Each item row with delete button
 - ZIP code input (stored in local state for the session)
-- "Find Prices" button — triggers retailer lookup + pricing
+- "Find Prices" button — triggers store lookup + pricing
 
 **State 2 — Product Review:**
 - `components/ProductMatch.tsx` — matched product name + price per item
-- `components/RetailerComparison.tsx` — lowest-cost retailer highlighted with estimated subtotal
+- `components/RetailerComparison.tsx` — lowest-cost Kroger store highlighted with estimated subtotal
 - `components/PriceDisclaimer.tsx` — rendered alongside every price (required)
-- "Go to Instacart" button — calls `/api/list`, opens handoff URL
+- "Add to Kroger Cart" button — triggers Kroger OAuth if not yet authorized, then calls `/api/cart`
 
-**State 3 — Handoff Confirmation:**
-- "Your list has been sent to Instacart" message
-- Fallback link in case redirect did not open automatically
-- Note that the user completes the order on Instacart
+**State 3 — Cart Confirmation:**
+- "Items added to your Kroger cart" message with link to kroger.com to complete checkout
+- Fallback link if redirect did not open automatically
 
 ---
 
 ### Phase 7 — Live API Integration
-**Dependencies:** `INSTACART_API_KEY` + `FOODSPARK_API_KEY`
-**Blocked until:** Keys arrive
+**Dependencies:** `KROGER_CLIENT_ID` + `KROGER_CLIENT_SECRET` in `.env.local`
+**Status:** ✅ Keys obtained — ready to test
 
-1. Replace mock returns in `lib/instacart.ts` with real fetch calls
-2. Replace mock returns in `lib/foodspark.ts` with real fetch calls
-3. Update `INSTACART_BASE_URL` to production URL when production key is approved
-4. Smoke test with a real ZIP code and a 3–5 item list
+1. Add credentials to `.env.local`
+2. Smoke test store lookup with a real ZIP code
+3. Smoke test product search with a 3–5 item list
+4. Test OAuth flow: authorize → callback → add to cart
+5. Confirm prices match what appears on kroger.com for the same store
 
 ---
 
 ### Phase 8 — End-to-End Test & Launch Prep
 **Dependencies:** Phase 7 complete
 
-1. Playwright test: sign-up → add items → find prices → click "Go to Instacart"
+1. Playwright test: sign-up → add items → find prices → authorize Kroger → items in cart
 2. `npm run lint` and `npm run check-types` — zero errors
 3. Verify price disclaimer appears on every screen that shows a price
 4. Add all env vars to Vercel dashboard (Project Settings → Environment Variables)
