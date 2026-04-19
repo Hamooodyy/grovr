@@ -119,7 +119,7 @@ export async function searchProducts(
   const token = await getClientToken();
   const params = new URLSearchParams({
     "filter.term": term,
-    "filter.limit": "6",
+    "filter.limit": "10",
   });
   if (locationId) params.set("filter.locationId", locationId);
 
