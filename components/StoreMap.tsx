@@ -65,12 +65,12 @@ export default function StoreMap({ stores, radiusInMiles, bestStoreId }: Props) 
   const radiusMeters = radiusInMiles * 1609.34;
 
   return (
-    <div className="w-full rounded-xl overflow-hidden border border-zinc-200 shadow-sm">
+    <div style={{ width: "100%", height: "100%", borderRadius: 0, overflow: "hidden" }}>
       <MapContainer
         center={center}
         zoom={11}
         scrollWheelZoom={false}
-        style={{ height: "320px", width: "100%" }}
+        style={{ height: "100%", width: "100%", minHeight: 320 }}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'

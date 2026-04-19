@@ -7,30 +7,100 @@ export default async function Home() {
   if (userId) redirect("/dashboard");
 
   return (
-    <div className="flex flex-col flex-1 items-center justify-center min-h-screen bg-zinc-50">
-      <main className="flex flex-col items-center gap-8 px-6 text-center">
-        <div className="flex flex-col items-center gap-2">
-          <h1 className="text-4xl font-bold tracking-tight text-zinc-900">
+    <div
+      style={{ background: "#0e1f14", minHeight: "100vh" }}
+      className="flex flex-col items-center justify-center px-6"
+    >
+      <main className="flex flex-col items-center gap-10 text-center max-w-md w-full">
+        {/* Logo */}
+        <div className="flex flex-col items-center gap-4">
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 18,
+              background: "var(--green)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"
+                fill="rgba(255,255,255,0.25)"
+                stroke="white"
+                strokeWidth="1.8"
+              />
+              <path d="M3 6h18" stroke="white" strokeWidth="1.8" />
+              <path
+                d="M16 10a4 4 0 01-8 0"
+                stroke="white"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
+          <h1
+            style={{
+              fontFamily: "var(--font-syne), Syne, sans-serif",
+              fontWeight: 800,
+              fontSize: 48,
+              letterSpacing: "-0.02em",
+              color: "white",
+              lineHeight: 1,
+            }}
+          >
             Grovr
           </h1>
-          <p className="text-lg text-zinc-500 max-w-sm">
-            Build your grocery list and find the cheapest store near you —
-            automatically.
+          <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 16, lineHeight: 1.6 }}>
+            Build your grocery list and find the cheapest store near you — automatically.
           </p>
         </div>
 
-        <div className="flex flex-col gap-3 w-full max-w-xs">
+        {/* Auth buttons */}
+        <div className="flex flex-col gap-3 w-full">
           <SignUpButton mode="redirect">
-            <button className="w-full rounded-full bg-zinc-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-zinc-700">
+            <button
+              style={{
+                width: "100%",
+                background: "var(--green)",
+                color: "white",
+                border: "none",
+                borderRadius: 14,
+                padding: "15px 24px",
+                fontFamily: "inherit",
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
               Get started
             </button>
           </SignUpButton>
           <SignInButton mode="redirect">
-            <button className="w-full rounded-full border border-zinc-300 px-6 py-3 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-100">
+            <button
+              style={{
+                width: "100%",
+                background: "rgba(255,255,255,0.08)",
+                color: "rgba(255,255,255,0.85)",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 14,
+                padding: "15px 24px",
+                fontFamily: "inherit",
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
               Sign in
             </button>
           </SignInButton>
         </div>
+
+        <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>
+          Saving you money on groceries, with none of the hassle.
+        </p>
       </main>
     </div>
   );

@@ -1,346 +1,777 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
-import dynamic from "next/dynamic";
-import type { GroceryItem, Retailer, PriceComparison } from "@/lib/types";
-import RetailerComparison from "./RetailerComparison";
-import ItemSearch from "./ItemSearch";
+import { useState, useRef } from "react";
+import type { GroceryItem, ProductSuggestion } from "@/lib/types";
 
-const StoreMap = dynamic(() => import("./StoreMap"), { ssr: false });
-
-type AppState = "building" | "loading" | "reviewing";
-
-let itemCounter = 0;
-
-export default function ShoppingList() {
-  const [appState, setAppState] = useState<AppState>("building");
-  const [items, setItems] = useState<GroceryItem[]>([]);
-  const [zip, setZip] = useState("");
-  const [radius, setRadius] = useState(10);
-  const [stores, setStores] = useState<Retailer[]>([]);
-  const [storesLoading, setStoresLoading] = useState(false);
-  const [comparisons, setComparisons] = useState<PriceComparison[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [cartLoading, setCartLoading] = useState(false);
-
-  const zipDebounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const radiusDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const bestStoreId = comparisons[0]?.retailer.id;
-  // Pass the first store's ID to ItemSearch so autocomplete is location-scoped
-  const locationId = stores[0]?.id;
-
-  // ── Item management ────────────────────────────────────────────────────────
-
-  function addItem(partial: Omit<GroceryItem, "id">) {
-    setItems((prev) => [...prev, { ...partial, id: String(++itemCounter) }]);
-  }
-
-  function removeItem(id: string) {
-    setItems((prev) => prev.filter((i) => i.id !== id));
-  }
-
-  function updateQty(id: string, delta: number) {
-    setItems((prev) =>
-      prev.map((i) =>
-        i.id === id ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i
-      )
+function ProductThumb({ imageUrl, name, size = 48 }: { imageUrl?: string; name: string; size?: number }) {
+  if (imageUrl) {
+    return (
+      <div
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 12,
+          background: "#f4f4f4",
+          flexShrink: 0,
+          overflow: "hidden",
+          border: "1px solid rgba(0,0,0,0.06)",
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt={name}
+          style={{ width: "100%", height: "100%", objectFit: "contain" }}
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+        />
+      </div>
     );
   }
 
-  // ── Store fetch ────────────────────────────────────────────────────────────
-
-  const fetchStores = useCallback(
-    async (zipCode: string, radiusInMiles: number): Promise<Retailer[]> => {
-      const res = await fetch(
-        `/api/stores?zip=${encodeURIComponent(zipCode)}&radius=${radiusInMiles}`
-      );
-      if (!res.ok) throw new Error("Failed to fetch stores");
-      const data = (await res.json()) as { stores: Retailer[] };
-      return data.stores;
-    },
-    []
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 12,
+        background: "var(--green-light)",
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        border: "1px solid rgba(22,163,74,0.15)",
+      }}
+    >
+      <svg width={size * 0.4} height={size * 0.4} viewBox="0 0 24 24" fill="none">
+        <path
+          d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"
+          stroke="var(--green)"
+          strokeWidth="1.8"
+        />
+        <path d="M3 6h18" stroke="var(--green)" strokeWidth="1.8" />
+        <path d="M16 10a4 4 0 01-8 0" stroke="var(--green)" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    </div>
   );
+}
 
-  function handleZipChange(value: string) {
-    setZip(value);
-    if (zipDebounceRef.current) clearTimeout(zipDebounceRef.current);
-    if (!/^\d{5}$/.test(value.trim())) return;
-    zipDebounceRef.current = setTimeout(async () => {
-      setStoresLoading(true);
-      try {
-        const updated = await fetchStores(value.trim(), radius);
-        setStores(updated);
-        setComparisons([]);
-        setAppState("building");
-      } catch {
-        // Non-fatal — will surface on Find Prices
-      } finally {
-        setStoresLoading(false);
-      }
-    }, 500);
-  }
+interface Props {
+  items: GroceryItem[];
+  addItem: (item: Omit<GroceryItem, "id">) => void;
+  removeItem: (id: string) => void;
+  updateQty: (id: string, delta: number) => void;
+  pricingLoading: boolean;
+  pricingError: string | null;
+  setPricingError: (e: string | null) => void;
+  findPrices: () => void;
+  onNavigate: (screen: "map" | "list" | "compare" | "checkout" | "track") => void;
+  locationId?: string;
+  isDesktop: boolean;
+  zip?: string;
+}
 
-  function handleRadiusChange(value: number) {
-    setRadius(value);
-    if (!zip.trim()) return;
-    if (radiusDebounceRef.current) clearTimeout(radiusDebounceRef.current);
-    radiusDebounceRef.current = setTimeout(async () => {
-      try {
-        const updated = await fetchStores(zip.trim(), value);
-        setStores(updated);
-        setComparisons([]);
-        setAppState("building");
-      } catch {
-        // Silently ignore mid-slider errors
-      }
-    }, 400);
-  }
+export default function ShoppingList({
+  items,
+  addItem,
+  removeItem,
+  updateQty,
+  pricingLoading,
+  pricingError,
+  setPricingError,
+  findPrices,
+  onNavigate,
+  locationId,
+  isDesktop,
+}: Props) {
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<ProductSuggestion[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [expandedPref, setExpandedPref] = useState<string | null>(null);
+  const [brandPrefs, setBrandPrefsState] = useState<Record<string, string>>({});
 
-  // ── Find Prices ────────────────────────────────────────────────────────────
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  async function findPrices() {
-    if (items.length === 0) { setError("Add at least one item."); return; }
-    if (!zip.trim()) { setError("Enter your ZIP code."); return; }
-    setError(null);
-    setAppState("loading");
+  const totalQty = items.reduce((s, i) => s + i.quantity, 0);
 
-    try {
-      const nearbyStores = stores.length > 0
-        ? stores
-        : await fetchStores(zip.trim(), radius);
-      if (stores.length === 0) setStores(nearbyStores);
+  // Category grouping for desktop summary panel
+  const catCounts = items.reduce<Record<string, number>>((acc, item) => {
+    const cat = "produce"; // default; Kroger API items don't carry cat metadata
+    acc[cat] = (acc[cat] || 0) + item.quantity;
+    return acc;
+  }, {});
 
-      if (nearbyStores.length === 0) {
-        setError("No Kroger stores found near that ZIP. Try increasing the radius.");
-        setAppState("building");
-        return;
-      }
+  function handleInput(value: string) {
+    setQuery(value);
+    setPricingError(null);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
-      const pricingRes = await fetch("/api/pricing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, stores: nearbyStores }),
-      });
-      if (!pricingRes.ok) throw new Error("Failed to fetch pricing");
-
-      const pricingData = (await pricingRes.json()) as { comparisons: PriceComparison[] };
-      setComparisons(pricingData.comparisons);
-      setAppState("reviewing");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
-      setAppState("building");
-    }
-  }
-
-  // ── Add to Kroger Cart ─────────────────────────────────────────────────────
-
-  async function handleAddToCart(comparison: PriceComparison) {
-    const cartItems = comparison.items
-      .filter((m) => m.upc && m.price > 0)
-      .map((m) => ({ upc: m.upc!, quantity: m.item.quantity }));
-
-    if (cartItems.length === 0) {
-      setError("No items with valid UPCs to add to cart.");
+    if (value.trim().length < 2) {
+      setSuggestions([]);
+      setOpen(false);
       return;
     }
 
-    setCartLoading(true);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/cart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: cartItems }),
-      });
-
-      if (res.status === 401) {
-        const data = (await res.json()) as { error: string };
-        if (data.error === "KROGER_AUTH_REQUIRED") {
-          const authRes = await fetch("/api/auth/kroger/url");
-          if (authRes.ok) {
-            const { url } = (await authRes.json()) as { url: string };
-            window.location.href = url;
-          }
-          return;
-        }
+    debounceRef.current = setTimeout(async () => {
+      setSuggestionsLoading(true);
+      try {
+        const qs = new URLSearchParams({ q: value.trim() });
+        if (locationId) qs.set("locationId", locationId);
+        const res = await fetch(`/api/search?${qs}`);
+        const data = (await res.json()) as { products: ProductSuggestion[] };
+        setSuggestions(data.products);
+        setOpen(data.products.length > 0);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setSuggestionsLoading(false);
       }
-
-      if (!res.ok) throw new Error("Failed to add to cart");
-      alert("Items added to your Kroger cart! Visit kroger.com to complete checkout.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add to cart.");
-    } finally {
-      setCartLoading(false);
-    }
+    }, 300);
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  function selectSuggestion(s: ProductSuggestion) {
+    addItem({
+      name: s.name,
+      quantity: 1,
+      unit: s.size ?? "each",
+      upc: s.upc,
+      imageUrl: s.imageUrl,
+    });
+    setQuery("");
+    setSuggestions([]);
+    setOpen(false);
+  }
 
-  return (
-    <div className="max-w-2xl mx-auto px-6 py-10 space-y-8">
+  function setBrandPref(id: string, val: string) {
+    setBrandPrefsState((prev) => ({ ...prev, [id]: val }));
+  }
 
-      {/* ── Grocery list ── */}
-      <section>
-        <h2 className="text-base font-semibold text-zinc-900 mb-3">Your grocery list</h2>
+  const SearchBar = () => (
+    <div style={{ position: "relative" }} ref={containerRef}>
+      <svg
+        style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)" }}
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+      >
+        <circle cx="11" cy="11" r="7" stroke="var(--muted)" strokeWidth="2" />
+        <path d="m16.5 16.5 4 4" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      <input
+        value={query}
+        onChange={(e) => handleInput(e.target.value)}
+        onFocus={() => suggestions.length > 0 && setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Search and add items…"
+        style={{
+          width: "100%",
+          padding: "12px 12px 12px 40px",
+          border: "1.5px solid var(--border)",
+          borderRadius: 12,
+          fontFamily: "inherit",
+          fontSize: 14,
+          outline: "none",
+          background: "var(--bg)",
+          boxSizing: "border-box",
+        }}
+      />
+      {suggestionsLoading && (
+        <span
+          style={{
+            position: "absolute",
+            right: 12,
+            top: "50%",
+            transform: "translateY(-50%)",
+            fontSize: 12,
+            color: "var(--muted)",
+          }}
+        >
+          …
+        </span>
+      )}
 
-        <ItemSearch onAdd={addItem} locationId={locationId} />
-
-        {items.length > 0 && (
-          <ul className="mt-3 space-y-2">
-            {items.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-center gap-3 rounded-xl bg-white border border-zinc-200 px-3 py-2"
-              >
-                {/* Product thumbnail */}
-                <div className="w-10 h-10 rounded-md bg-zinc-100 flex-shrink-0 overflow-hidden">
-                  {item.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      className="w-full h-full object-contain"
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-zinc-300 text-xs">?</div>
-                  )}
-                </div>
-
-                {/* Name + unit */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-zinc-800 truncate">{item.name}</p>
-                  {item.unit !== "each" && (
-                    <p className="text-xs text-zinc-400">{item.unit}</p>
-                  )}
-                </div>
-
-                {/* Qty stepper */}
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button
-                    onClick={() => updateQty(item.id, -1)}
-                    className="w-6 h-6 rounded-md border border-zinc-300 text-zinc-600 text-sm leading-none hover:bg-zinc-100 transition-colors"
-                  >
-                    −
-                  </button>
-                  <span className="w-5 text-center text-sm font-semibold text-zinc-900">
-                    {item.quantity}
-                  </span>
-                  <button
-                    onClick={() => updateQty(item.id, 1)}
-                    className="w-6 h-6 rounded-md border border-zinc-300 text-zinc-600 text-sm leading-none hover:bg-zinc-100 transition-colors"
-                  >
-                    +
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => removeItem(item.id)}
-                  className="flex-shrink-0 text-zinc-400 hover:text-red-500 transition-colors text-xs ml-1"
+      {open && suggestions.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            background: "white",
+            border: "1px solid var(--border)",
+            borderRadius: 12,
+            marginTop: 4,
+            overflow: "hidden",
+            boxShadow: "var(--shadow-lg)",
+            zIndex: 50,
+          }}
+        >
+          {suggestions.slice(0, 5).map((s) => (
+            <div
+              key={s.productId}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => selectSuggestion(s)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 14px",
+                cursor: "pointer",
+                borderBottom: "1px solid var(--border)",
+              }}
+            >
+              <ProductThumb imageUrl={s.imageUrl} name={s.name} size={36} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    fontSize: 13,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
                 >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* ── Location + radius ── */}
-      <section className="space-y-4">
-        <div>
-          <label className="block text-xs font-medium text-zinc-600 mb-1">ZIP code</label>
-          <input
-            type="text"
-            value={zip}
-            onChange={(e) => handleZipChange(e.target.value)}
-            placeholder="e.g. 45202"
-            maxLength={10}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-green-500"
-          />
+                  {s.name}
+                </div>
+                <div style={{ color: "var(--muted)", fontSize: 11 }}>
+                  {[s.brand, s.size].filter(Boolean).join(" · ")}
+                </div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 5v14M5 12h14"
+                  stroke="var(--green)"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          ))}
         </div>
-        <div>
-          <label className="flex items-center justify-between text-xs font-medium text-zinc-600 mb-1">
-            <span>Search radius</span>
-            <span className="text-zinc-900 font-semibold">{radius} mi</span>
-          </label>
-          <input
-            type="range"
-            min={5}
-            max={25}
-            step={1}
-            value={radius}
-            onChange={(e) => handleRadiusChange(Number(e.target.value))}
-            className="w-full accent-green-600"
-          />
-          <div className="flex justify-between text-xs text-zinc-400 mt-0.5">
-            <span>5 mi</span>
-            <span>25 mi</span>
+      )}
+    </div>
+  );
+
+  const EmptyState = () => (
+    <div style={{ textAlign: "center", padding: "48px 24px", color: "var(--muted)" }}>
+      <svg
+        width="48"
+        height="48"
+        viewBox="0 0 24 24"
+        fill="none"
+        style={{ display: "block", margin: "0 auto 12px", opacity: 0.25 }}
+      >
+        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke="#888" strokeWidth="1.5" />
+        <line x1="3" y1="6" x2="21" y2="6" stroke="#888" strokeWidth="1.5" />
+        <path d="M16 10a4 4 0 01-8 0" stroke="#888" strokeWidth="1.5" />
+      </svg>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>Your list is empty</div>
+      <div style={{ fontSize: 13 }}>Search for items above to get started</div>
+    </div>
+  );
+
+  const ItemList = () => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {items.map((item) => {
+        const prefOpen = expandedPref === item.id;
+        const hasPref = (brandPrefs[item.id] || "").trim().length > 0;
+        return (
+          <div
+            key={item.id}
+            style={{
+              background: "white",
+              borderRadius: 14,
+              boxShadow: "0 1px 4px rgba(0,20,10,0.06)",
+              overflow: "hidden",
+            }}
+            className="animate-fade-in"
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "12px 14px",
+              }}
+            >
+              <ProductThumb imageUrl={item.imageUrl} name={item.name} size={48} />
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    fontSize: 14,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {item.name}
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    marginTop: 3,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {item.unit !== "each" && (
+                    <span style={{ color: "var(--muted)", fontSize: 12 }}>{item.unit}</span>
+                  )}
+                  {hasPref ? (
+                    <span
+                      onClick={() => setExpandedPref(prefOpen ? null : item.id)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 3,
+                        background: "var(--green-light)",
+                        borderRadius: 99,
+                        padding: "2px 8px",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: "var(--green)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      ♥ {brandPrefs[item.id]}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setExpandedPref(prefOpen ? null : item.id)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        padding: "3px 9px",
+                        borderRadius: 99,
+                        cursor: "pointer",
+                        border: "1.5px dashed var(--border)",
+                        background: "white",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: "var(--muted)",
+                      }}
+                    >
+                      + Brand preference
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Qty stepper */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <button
+                  onClick={() => updateQty(item.id, -1)}
+                  style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 99,
+                    border: "1.5px solid var(--border)",
+                    background: "var(--bg)",
+                    cursor: "pointer",
+                    fontSize: 16,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "var(--muted)",
+                  }}
+                >
+                  −
+                </button>
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    minWidth: 14,
+                    textAlign: "center",
+                  }}
+                >
+                  {item.quantity}
+                </span>
+                <button
+                  onClick={() => updateQty(item.id, 1)}
+                  style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 99,
+                    border: "1.5px solid var(--green)",
+                    background: "var(--green-light)",
+                    cursor: "pointer",
+                    fontSize: 16,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "var(--green)",
+                  }}
+                >
+                  +
+                </button>
+              </div>
+
+              <button
+                onClick={() => removeItem(item.id)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#cbd5d1",
+                  cursor: "pointer",
+                  fontSize: 20,
+                  lineHeight: 1,
+                  padding: "0 2px",
+                  flexShrink: 0,
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Brand preference editor */}
+            {prefOpen && (
+              <div
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  padding: "10px 14px 12px",
+                  background: "var(--bg)",
+                }}
+                className="animate-fade-in"
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "var(--muted)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                    marginBottom: 7,
+                  }}
+                >
+                  Brand preference
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    autoFocus
+                    value={brandPrefs[item.id] || ""}
+                    onChange={(e) => setBrandPref(item.id, e.target.value)}
+                    placeholder={`e.g. "Organic Valley", "store brand"…`}
+                    style={{
+                      flex: 1,
+                      padding: "9px 12px",
+                      border: "1.5px solid var(--border)",
+                      borderRadius: 10,
+                      fontFamily: "inherit",
+                      fontSize: 13,
+                      outline: "none",
+                      background: "white",
+                    }}
+                  />
+                  <button
+                    onClick={() => setExpandedPref(null)}
+                    style={{
+                      padding: "9px 14px",
+                      borderRadius: 10,
+                      border: "none",
+                      background: hasPref ? "var(--green)" : "var(--border)",
+                      color: hasPref ? "white" : "var(--muted)",
+                      fontFamily: "inherit",
+                      fontWeight: 600,
+                      fontSize: 13,
+                      cursor: "pointer",
+                      flexShrink: 0,
+                    }}
+                  >
+                    Done
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
+                  We&apos;ll match the closest available product at checkout.
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // ── Desktop layout ──────────────────────────────────────────────────────────
+  if (isDesktop) {
+    return (
+      <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
+        {/* Left: list */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div
+            style={{
+              padding: "20px 20px 0",
+              background: "white",
+              borderBottom: "1px solid var(--border)",
+              flexShrink: 0,
+              position: "relative",
+            }}
+          >
+            <SearchBar />
+            <div style={{ height: 16 }} />
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
+            {pricingError && (
+              <div
+                style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  borderRadius: 10,
+                  padding: "10px 14px",
+                  fontSize: 13,
+                  color: "#dc2626",
+                  marginBottom: 16,
+                }}
+              >
+                {pricingError}
+              </div>
+            )}
+            {items.length === 0 ? <EmptyState /> : <ItemList />}
           </div>
         </div>
-      </section>
 
-      {/* ── Store map ── */}
-      <section>
-        {storesLoading && (
-          <p className="text-xs text-zinc-400 mb-2">Finding nearby stores…</p>
-        )}
-        {!storesLoading && stores.length > 0 && (
-          <p className="text-xs font-medium text-zinc-500 mb-2">
-            {stores.length} store{stores.length !== 1 ? "s" : ""} within {radius} mi
-            {bestStoreId && (
-              <span className="text-green-600 ml-1">— best price highlighted</span>
-            )}
-          </p>
-        )}
-        {!storesLoading && stores.length === 0 && zip.length === 5 && !storesLoading && (
-          <p className="text-xs text-zinc-400 mb-2">
-            No stores found within {radius} mi. Try increasing the radius.
-          </p>
-        )}
-        <StoreMap stores={stores} radiusInMiles={radius} bestStoreId={bestStoreId} />
-      </section>
-
-      {/* ── Error ── */}
-      {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-          {error}
-        </p>
-      )}
-
-      {/* ── Find Prices ── */}
-      {appState !== "reviewing" && (
-        <button
-          onClick={findPrices}
-          disabled={appState === "loading"}
-          className="w-full rounded-lg bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        {/* Right: summary panel */}
+        <div
+          style={{
+            width: 300,
+            flexShrink: 0,
+            background: "white",
+            borderLeft: "1px solid var(--border)",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
         >
-          {appState === "loading" ? "Finding prices…" : "Find Prices"}
-        </button>
-      )}
-
-      {/* ── Price comparison table ── */}
-      {appState === "reviewing" && comparisons.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-zinc-900">Price comparison</h2>
-            <button
-              onClick={() => { setAppState("building"); setComparisons([]); }}
-              className="text-xs text-zinc-400 hover:text-zinc-600 underline"
+          <div style={{ padding: "20px", borderBottom: "1px solid var(--border)" }}>
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: 16,
+                fontFamily: "var(--font-syne), Syne, sans-serif",
+                marginBottom: 4,
+              }}
             >
-              Edit list
+              List Summary
+            </div>
+            <div style={{ color: "var(--muted)", fontSize: 13 }}>
+              {totalQty} item{totalQty !== 1 ? "s" : ""} across{" "}
+              {Object.keys(catCounts).length || 1} categor{Object.keys(catCounts).length !== 1 ? "ies" : "y"}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
+            {/* Brand prefs */}
+            {Object.entries(brandPrefs).filter(([, v]) => v).length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "var(--muted)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                    marginBottom: 10,
+                  }}
+                >
+                  Brand Preferences
+                </div>
+                {items
+                  .filter((i) => brandPrefs[i.id])
+                  .map((i) => (
+                    <div
+                      key={i.id}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        fontSize: 12,
+                        marginBottom: 6,
+                        color: "var(--muted)",
+                      }}
+                    >
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, marginRight: 8 }}>
+                        {i.name}
+                      </span>
+                      <span style={{ fontWeight: 600, color: "var(--green)", flexShrink: 0 }}>
+                        {brandPrefs[i.id]}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {items.length > 0 && (
+              <div
+                style={{
+                  background: "var(--green-xlight)",
+                  borderRadius: 12,
+                  padding: "14px",
+                  border: "1px solid rgba(22,163,74,0.15)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "var(--green)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                    marginBottom: 6,
+                  }}
+                >
+                  Items ready to compare
+                </div>
+                <div
+                  style={{
+                    fontFamily: "var(--font-syne), Syne, sans-serif",
+                    fontSize: 22,
+                    fontWeight: 800,
+                    color: "var(--text)",
+                    marginBottom: 2,
+                  }}
+                >
+                  {items.length} item{items.length !== 1 ? "s" : ""}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                  Compare prices to find the best deal
+                </div>
+              </div>
+            )}
+          </div>
+
+          {items.length > 0 && (
+            <div style={{ padding: "16px", borderTop: "1px solid var(--border)" }}>
+              <button
+                onClick={findPrices}
+                disabled={pricingLoading}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  padding: "14px 24px",
+                  borderRadius: 14,
+                  fontFamily: "inherit",
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: pricingLoading ? "not-allowed" : "pointer",
+                  border: "none",
+                  background: "var(--green)",
+                  color: "white",
+                  opacity: pricingLoading ? 0.65 : 1,
+                  transition: "all 0.15s",
+                }}
+              >
+                {pricingLoading ? "Finding prices…" : "Compare prices →"}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Mobile layout ───────────────────────────────────────────────────────────
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div
+        style={{
+          padding: "16px 16px 0",
+          background: "white",
+          borderBottom: "1px solid var(--border)",
+          flexShrink: 0,
+          position: "relative",
+        }}
+      >
+        <SearchBar />
+        <div style={{ height: 12 }} />
+      </div>
+
+      <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+        {pricingError && (
+          <div
+            style={{
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: 10,
+              padding: "10px 14px",
+              fontSize: 13,
+              color: "#dc2626",
+              marginBottom: 16,
+            }}
+          >
+            {pricingError}
+          </div>
+        )}
+        {items.length === 0 ? <EmptyState /> : <ItemList />}
+      </div>
+
+      {items.length > 0 && (
+        <div
+          style={{
+            padding: "16px",
+            background: "white",
+            borderTop: "1px solid var(--border)",
+            flexShrink: 0,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+          >
+            <span style={{ color: "var(--muted)", fontSize: 13 }}>
+              {totalQty} item{totalQty !== 1 ? "s" : ""}
+            </span>
+            <button
+              onClick={() => onNavigate("map")}
+              style={{
+                background: "none",
+                border: "none",
+                fontSize: 12,
+                color: "var(--muted)",
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
+            >
+              Change store
             </button>
           </div>
-          <RetailerComparison
-            comparisons={comparisons}
-            onAddToCart={handleAddToCart}
-            cartLoading={cartLoading}
-          />
-        </section>
+          <button
+            onClick={findPrices}
+            disabled={pricingLoading}
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: "14px 24px",
+              borderRadius: 14,
+              fontFamily: "inherit",
+              fontSize: 15,
+              fontWeight: 600,
+              cursor: pricingLoading ? "not-allowed" : "pointer",
+              border: "none",
+              background: "var(--green)",
+              color: "white",
+              opacity: pricingLoading ? 0.65 : 1,
+              transition: "all 0.15s",
+            }}
+          >
+            {pricingLoading ? "Finding prices…" : "Compare prices across stores →"}
+          </button>
+        </div>
       )}
-
     </div>
   );
 }
