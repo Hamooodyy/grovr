@@ -3,6 +3,17 @@ export interface GroceryItem {
   name: string;
   quantity: number;
   unit: string;
+  upc?: string;      // pre-resolved from autocomplete; used for exact pricing
+  imageUrl?: string; // thumbnail from Kroger product catalog
+}
+
+export interface ProductSuggestion {
+  productId: string;
+  upc: string;
+  name: string;
+  brand?: string;
+  size?: string;
+  imageUrl?: string;
 }
 
 export interface ProductMatch {
@@ -18,6 +29,8 @@ export interface Retailer {
   name: string;
   logoUrl: string;
   postalCode: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface PriceComparison {

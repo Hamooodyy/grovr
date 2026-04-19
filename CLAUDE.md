@@ -21,6 +21,7 @@ Build a functional MVP for Grovr focusing on pricing analysis and order placemen
 - **Authentication:** Clerk (`@clerk/nextjs`) — use pre-built UI components, do not build custom auth forms
 - **Pricing & Retail Data:** Kroger Developer API — official public API, free tier, returns real-time product prices per store location
 - **Cart Handoff:** Kroger Cart API (OAuth `authorization_code` flow) — items land directly in the user's Kroger cart
+- **Maps:** `react-leaflet` + OpenStreetMap tiles — no API key required; used to display nearby stores and the user-selected search radius
 - **Database/Backend:** TBD — do not integrate a database until one is determined necessary for the MVP
 - **Deployment:** Vercel
 
@@ -86,6 +87,7 @@ KROGER_REDIRECT_URI=http://localhost:3000/api/auth/kroger/callback  # update for
   /types.ts                        — Shared TypeScript types
 /components
   /ShoppingList.tsx                — List input + item management
+  /StoreMap.tsx                    — react-leaflet map: store pins + radius circle overlay + radius slider
   /ProductMatch.tsx                — Display matched product + price + disclaimer
   /RetailerComparison.tsx          — Show lowest-cost retailer recommendation
   /PriceDisclaimer.tsx             — Reusable disclaimer shown alongside all prices
@@ -110,6 +112,7 @@ KROGER_REDIRECT_URI=http://localhost:3000/api/auth/kroger/callback  # update for
 |---|---|---|---|
 | **Clerk** | App auth (sign-up, sign-in, session) | ✅ Keys in `.env.local` | `.env.local` (dev) / Vercel env vars (prod) |
 | **Kroger** | Store lookup, product pricing, cart handoff | ✅ Client ID + Secret obtained | `.env.local` → `KROGER_CLIENT_ID` / `KROGER_CLIENT_SECRET` |
+| **Kroger env** | Certification (sandbox) only — base URL is `https://api-ce.kroger.com/v1` | ⚠️ Must swap to `api.kroger.com` for prod | `lib/kroger.ts` → `BASE_URL` |
 
 **Rules:**
 - `CLERK_SECRET_KEY`, `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET` are server-only — never use in client components
@@ -150,7 +153,7 @@ KROGER_REDIRECT_URI=http://localhost:3000/api/auth/kroger/callback  # update for
 Create `lib/types.ts` with:
 - `GroceryItem` — `{ id, name, quantity, unit }`
 - `ProductMatch` — `{ item, matchedName, price, retailerId }`
-- `Retailer` — `{ id, name, logoUrl, postalCode }`
+- `Retailer` — `{ id, name, logoUrl, postalCode, lat, lng }` — coordinates used by StoreMap
 - `PriceComparison` — `{ retailer, subtotal, items: ProductMatch[] }`
 
 ---
@@ -172,7 +175,7 @@ Build `lib/pricing.ts`:
 **Status:** ✅ Done — stubs return mock data, real calls fire when `KROGER_CLIENT_ID` is set
 
 **Functions:**
-- `getNearbyStores(zipCode)` — Kroger Locations API, returns up to 5 nearby stores
+- `getNearbyStores(zipCode, radiusInMiles?)` — Kroger Locations API, returns up to 5 nearby stores including `lat`/`lng` from the `geolocation` field
 - `searchProduct(item, locationId)` — Kroger Products API, returns best match + price (promo preferred); cached 1 hour
 - `getKrogerAuthUrl()` — builds OAuth authorization URL for `cart.basic:write`
 - `exchangeCodeForUserToken(code)` — exchanges authorization code for user access token
@@ -190,7 +193,7 @@ Build `lib/pricing.ts`:
 **Dependencies:** Phase 4 (`lib/kroger.ts`)
 **Can build now:** Yes
 
-- `app/api/stores/route.ts` — accepts `?zip=`, calls `getNearbyStores()`, returns store list
+- `app/api/stores/route.ts` — accepts `?zip=` and `?radius=` (miles, default 10), calls `getNearbyStores()`, returns store list with coordinates
 - `app/api/pricing/route.ts` — accepts item list + store IDs, calls `searchProduct()` per item/store, returns `PriceComparison[]`
 - `app/api/cart/route.ts` — accepts items + user token, calls `addToCart()`
 - `app/api/auth/kroger/callback/route.ts` — receives OAuth code, calls `exchangeCodeForUserToken()`, stores token in session
@@ -199,13 +202,22 @@ Build `lib/pricing.ts`:
 
 ### Phase 6 — UI (3-state Dashboard)
 **Dependencies:** Phase 2 types, Phase 5 API routes
-**Can build now:** Yes (wire to mock API responses)
+**Can build now:** Yes — wire directly to live API routes (no mocks needed, keys are set)
 
 **State 1 — List Building** (`components/ShoppingList.tsx`):
 - Text input, add item on Enter
 - Each item row with delete button
 - ZIP code input (stored in local state for the session)
+- Radius slider (5–25 miles, default 10) — controls store search radius; stored in local state
 - "Find Prices" button — triggers store lookup + pricing
+
+**State 1b — Store Map** (`components/StoreMap.tsx`):
+- Rendered after ZIP is entered and stores are fetched (before or alongside pricing)
+- `react-leaflet` map centered on the ZIP code (geocoded via Nominatim/OpenStreetMap — no API key needed)
+- One pin per nearby store; clicking a pin shows the store name
+- Circle overlay centered on the ZIP, radius matches the user-selected slider value
+- Adjusting the radius slider re-fetches stores and updates the map in real time
+- Map is hidden until at least one store is returned
 
 **State 2 — Product Review:**
 - `components/ProductMatch.tsx` — matched product name + price per item
@@ -216,6 +228,8 @@ Build `lib/pricing.ts`:
 **State 3 — Cart Confirmation:**
 - "Items added to your Kroger cart" message with link to kroger.com to complete checkout
 - Fallback link if redirect did not open automatically
+
+**Map library:** `react-leaflet` v4 + `leaflet` + OpenStreetMap tiles. Requires a dynamic import with `ssr: false` (Leaflet uses `window` and breaks SSR). Leaflet CSS must be imported globally in `app/layout.tsx`.
 
 ---
 

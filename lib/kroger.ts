@@ -1,6 +1,6 @@
-import type { GroceryItem, ProductMatch, Retailer } from "./types";
+import type { GroceryItem, ProductMatch, ProductSuggestion, Retailer } from "./types";
 
-const BASE_URL = "https://api.kroger.com/v1";
+const BASE_URL = "https://api-ce.kroger.com/v1";
 const CLIENT_ID = process.env.KROGER_CLIENT_ID ?? "";
 const CLIENT_SECRET = process.env.KROGER_CLIENT_SECRET ?? "";
 const REDIRECT_URI =
@@ -58,7 +58,10 @@ async function getClientToken(): Promise<string> {
  * Returns up to 5 Kroger-family stores near the given ZIP code.
  * Falls back to mock data when KROGER_CLIENT_ID is not set.
  */
-export async function getNearbyStores(zipCode: string): Promise<Retailer[]> {
+export async function getNearbyStores(
+  zipCode: string,
+  radiusInMiles = 10
+): Promise<Retailer[]> {
   if (!CLIENT_ID) {
     return [
       { id: "70100942", name: "Kroger", logoUrl: "", postalCode: zipCode },
@@ -71,7 +74,7 @@ export async function getNearbyStores(zipCode: string): Promise<Retailer[]> {
   const params = new URLSearchParams({
     "filter.zipCode.near": zipCode,
     "filter.limit.total": "5",
-    "filter.radiusInMiles": "10",
+    "filter.radiusInMiles": String(radiusInMiles),
   });
 
   const res = await fetch(`${BASE_URL}/locations?${params}`, {
@@ -85,6 +88,7 @@ export async function getNearbyStores(zipCode: string): Promise<Retailer[]> {
       locationId: string;
       name: string;
       address: { zipCode: string };
+      geolocation?: { latitude: number; longitude: number };
     }>;
   };
 
@@ -93,7 +97,64 @@ export async function getNearbyStores(zipCode: string): Promise<Retailer[]> {
     name: loc.name,
     logoUrl: "",
     postalCode: loc.address.zipCode,
+    lat: loc.geolocation?.latitude,
+    lng: loc.geolocation?.longitude,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Product autocomplete — returns suggestions with images for the search UI
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns up to 6 product suggestions matching the given term.
+ * Optionally scoped to a store location for availability context.
+ */
+export async function searchProducts(
+  term: string,
+  locationId?: string
+): Promise<ProductSuggestion[]> {
+  if (!CLIENT_ID) return [];
+
+  const token = await getClientToken();
+  const params = new URLSearchParams({
+    "filter.term": term,
+    "filter.limit": "6",
+  });
+  if (locationId) params.set("filter.locationId", locationId);
+
+  const res = await fetch(`${BASE_URL}/products?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) return [];
+
+  const data = (await res.json()) as {
+    data: Array<{
+      productId: string;
+      upc?: string;
+      description: string;
+      brand?: string;
+      images?: Array<{
+        perspective: string;
+        sizes: Array<{ size: string; url: string }>;
+      }>;
+      items?: Array<{ size?: string }>;
+    }>;
+  };
+
+  return data.data.map((p) => {
+    const front = p.images?.find((img) => img.perspective === "front");
+    const thumbnail = front?.sizes.find((s) => s.size === "thumbnail")?.url;
+    return {
+      productId: p.productId,
+      upc: p.upc ?? p.productId,
+      name: p.description,
+      brand: p.brand,
+      size: p.items?.[0]?.size,
+      imageUrl: thumbnail,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -148,24 +209,32 @@ async function fetchProduct(
   }
 
   const token = await getClientToken();
-  const params = new URLSearchParams({
-    "filter.term": item.name,
-    "filter.locationId": locationId,
-    "filter.limit": "1",
-  });
+  // If the item was selected from autocomplete its UPC is known — use exact
+  // product ID lookup instead of fuzzy term search for accurate pricing.
+  const params = new URLSearchParams(
+    item.upc
+      ? { "filter.productId": item.upc, "filter.locationId": locationId, "filter.limit": "1" }
+      : { "filter.term": item.name, "filter.locationId": locationId, "filter.limit": "1" }
+  );
 
   const res = await fetch(`${BASE_URL}/products?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
-  if (!res.ok) throw new Error(`searchProduct failed: ${res.status}`);
+  if (!res.ok) {
+    // Treat transient server errors as "not found" rather than crashing the whole request
+    if (res.status >= 500) {
+      return { item, matchedName: item.name, price: 0, retailerId: locationId };
+    }
+    throw new Error(`searchProduct failed: ${res.status}`);
+  }
 
   const data = (await res.json()) as {
     data: Array<{
       productId: string;
       description: string;
       items: Array<{
-        price: { regular: number; promo?: number };
+        price?: { regular: number; promo?: number };
       }>;
     }>;
   };
@@ -177,7 +246,12 @@ async function fetchProduct(
 
   const product = data.data[0];
   const itemData = product.items[0];
-  const price = itemData.price.promo ?? itemData.price.regular;
+  // price may be absent in the certification environment for some products
+  const priceObj = itemData.price;
+  if (!priceObj) {
+    return { item, matchedName: product.description, price: 0, retailerId: locationId };
+  }
+  const price = priceObj.promo ?? priceObj.regular;
 
   return {
     item,
