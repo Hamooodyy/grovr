@@ -231,7 +231,7 @@ export default function CheckoutScreen({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontFamily: "var(--font-syne), Syne, sans-serif",
+          fontFamily: "Arial, sans-serif",
           fontWeight: 800,
           fontSize: 16,
           color: "white",
@@ -394,7 +394,7 @@ export default function CheckoutScreen({
               style={{
                 fontWeight: 800,
                 fontSize: 16,
-                fontFamily: "var(--font-syne), Syne, sans-serif",
+                fontFamily: "Arial, sans-serif",
                 marginBottom: 16,
               }}
             >
@@ -442,7 +442,7 @@ export default function CheckoutScreen({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontFamily: "var(--font-syne), Syne, sans-serif",
+              fontFamily: "Arial, sans-serif",
               fontWeight: 800,
               fontSize: 16,
               color: "white",

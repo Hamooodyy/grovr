@@ -43,7 +43,7 @@ export default async function Home() {
           </div>
           <h1
             style={{
-              fontFamily: "var(--font-syne), Syne, sans-serif",
+              fontFamily: "Arial, sans-serif",
               fontWeight: 800,
               fontSize: 48,
               letterSpacing: "-0.02em",

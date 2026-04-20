@@ -17,18 +17,33 @@ interface Props {
 
 function fmt(n: number) { return `$${n.toFixed(2)}`; }
 
-function WinnerCard({ winner, second, revealed }: { winner: PriceComparison; second?: PriceComparison; revealed: boolean }) {
-  const savings = second ? second.subtotal - winner.subtotal : 0;
+function SelectedCard({
+  selected,
+  cheapest,
+  second,
+  revealed,
+}: {
+  selected: PriceComparison;
+  cheapest: PriceComparison;
+  second?: PriceComparison;
+  revealed: boolean;
+}) {
+  const isRecommended = selected.retailer.id === cheapest.retailer.id;
+  const savings = second ? second.subtotal - cheapest.subtotal : 0;
+  const extraCost = selected.subtotal - cheapest.subtotal;
+
   return (
     <div
       style={{
-        background: "var(--green)",
+        background: isRecommended ? "var(--green)" : "#1e3a5f",
         borderRadius: 20,
         padding: "24px",
         marginBottom: 16,
         position: "relative",
         overflow: "hidden",
-        boxShadow: "0 8px 32px rgba(22,163,74,0.25)",
+        boxShadow: isRecommended
+          ? "0 8px 32px rgba(22,163,74,0.25)"
+          : "0 8px 32px rgba(30,58,95,0.25)",
       }}
     >
       {/* Decorative circles */}
@@ -67,22 +82,22 @@ function WinnerCard({ winner, second, revealed }: { winner: PriceComparison; sec
           textTransform: "uppercase",
         }}
       >
-        Best Value
+        {isRecommended ? "Best Value" : "Your Selection"}
       </span>
 
       <div style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, marginTop: 8, marginBottom: 2 }}>
-        {winner.retailer.postalCode}
+        {selected.retailer.postalCode}
       </div>
       <div
         style={{
-          fontFamily: "var(--font-syne), Syne, sans-serif",
+          fontFamily: "Arial, sans-serif",
           fontSize: 24,
           fontWeight: 800,
           color: "white",
           marginBottom: 4,
         }}
       >
-        {winner.retailer.name}
+        {selected.retailer.name}
       </div>
 
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
@@ -96,7 +111,7 @@ function WinnerCard({ winner, second, revealed }: { winner: PriceComparison; sec
             transition: "all 0.5s cubic-bezier(0.34,1.56,0.64,1)",
           }}
         >
-          {fmt(winner.subtotal)}
+          {fmt(selected.subtotal)}
         </span>
         <span
           style={{
@@ -110,7 +125,7 @@ function WinnerCard({ winner, second, revealed }: { winner: PriceComparison; sec
         </span>
       </div>
 
-      {revealed && savings > 0.01 && (
+      {revealed && isRecommended && savings > 0.01 && (
         <div
           style={{
             marginTop: 12,
@@ -126,64 +141,164 @@ function WinnerCard({ winner, second, revealed }: { winner: PriceComparison; sec
           💰 Save <b style={{ fontSize: 15 }}>{fmt(savings)}</b> vs next best
         </div>
       )}
+      {revealed && !isRecommended && extraCost > 0.01 && (
+        <div
+          style={{
+            marginTop: 12,
+            background: "rgba(255,255,255,0.15)",
+            borderRadius: 10,
+            padding: "8px 12px",
+            fontSize: 13,
+            color: "white",
+            display: "inline-block",
+          }}
+          className="animate-fade-in"
+        >
+          +{fmt(extraCost)} vs best value ({cheapest.retailer.name})
+        </div>
+      )}
     </div>
   );
 }
 
-function StoreList({ comparisons, winner }: { comparisons: PriceComparison[]; winner: PriceComparison }) {
+function diffReason(c: PriceComparison, cheapest: PriceComparison): { oosCount: number; pricier: boolean } {
+  const oosCount = c.items.filter((m) => m.price === 0).length;
+  let coreDiff = 0;
+  for (const match of c.items) {
+    if (match.price === 0) continue;
+    const cheapMatch = cheapest.items.find((m) => m.item.id === match.item.id);
+    if (cheapMatch && cheapMatch.price > 0) coreDiff += match.price - cheapMatch.price;
+  }
+  return { oosCount, pricier: coreDiff > 0.01 };
+}
+
+function StoreList({
+  comparisons,
+  selectedIdx,
+  onSelect,
+}: {
+  comparisons: PriceComparison[];
+  selectedIdx: number;
+  onSelect: (idx: number) => void;
+}) {
+  const cheapest = comparisons[0];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {comparisons.map((c, i) => (
-        <div
-          key={c.retailer.id}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "14px 16px",
-            background: "white",
-            borderRadius: 14,
-            border: `1.5px solid ${i === 0 ? "var(--green)" : "var(--border)"}`,
-            boxShadow: i === 0 ? "0 2px 12px rgba(22,163,74,0.1)" : "none",
-          }}
-        >
+      {comparisons.map((c, i) => {
+        const isSelected = i === selectedIdx;
+        const isCheapest = i === 0;
+        const { oosCount, pricier } = i > 0 ? diffReason(c, cheapest) : { oosCount: 0, pricier: false };
+        const subtotalDiff = c.subtotal - cheapest.subtotal;
+
+        // Build reason parts
+        const reasons: string[] = [];
+        if (oosCount > 0) reasons.push(`${oosCount} item${oosCount > 1 ? "s" : ""} unavailable`);
+        if (pricier) reasons.push("higher prices");
+        const reasonText = reasons.join(" · ");
+
+        return (
           <div
+            key={c.retailer.id}
+            onClick={() => onSelect(i)}
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: 99,
-              background: i === 0 ? "var(--green)" : "var(--bg)",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 800,
-              fontSize: 14,
-              color: i === 0 ? "white" : "var(--muted)",
-              flexShrink: 0,
+              gap: 12,
+              padding: "14px 16px",
+              background: "white",
+              borderRadius: 14,
+              border: `1.5px solid ${isSelected ? "var(--green)" : "var(--border)"}`,
+              boxShadow: isSelected ? "0 2px 12px rgba(22,163,74,0.1)" : "none",
+              cursor: "pointer",
+              transition: "border-color 0.15s, box-shadow 0.15s",
             }}
           >
-            {i + 1}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{c.retailer.name}</div>
-            <div style={{ color: "var(--muted)", fontSize: 12 }}>{c.retailer.postalCode}</div>
-          </div>
-          <div
-            style={{
-              fontWeight: 700,
-              fontSize: 16,
-              color: i === 0 ? "var(--green)" : "var(--text)",
-            }}
-          >
-            {fmt(c.subtotal)}
-          </div>
-          {i > 0 && (
-            <div style={{ color: "var(--muted)", fontSize: 12, minWidth: 40, textAlign: "right" }}>
-              +{fmt(c.subtotal - winner.subtotal)}
+            {/* Price rank badge */}
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 99,
+                background: isCheapest ? "var(--green)" : "var(--bg)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 800,
+                fontSize: 14,
+                color: isCheapest ? "white" : "var(--muted)",
+                flexShrink: 0,
+              }}
+            >
+              {i + 1}
             </div>
-          )}
-        </div>
-      ))}
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{c.retailer.name}</span>
+                {isCheapest && (
+                  <span
+                    style={{
+                      background: "var(--green-light)",
+                      color: "var(--green)",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      borderRadius: 99,
+                      padding: "1px 7px",
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    Best Value
+                  </span>
+                )}
+              </div>
+              <div style={{ color: "var(--muted)", fontSize: 12 }}>{c.retailer.postalCode}</div>
+              {i > 0 && reasonText && (
+                <div style={{ fontSize: 11, color: "#dc2626", marginTop: 2, fontWeight: 500 }}>
+                  {reasonText}
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ textAlign: "right" }}>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: 16,
+                    color: isCheapest ? "var(--green)" : "var(--text)",
+                  }}
+                >
+                  {fmt(c.subtotal)}
+                </div>
+                {i > 0 && !oosCount && (
+                  <div style={{ color: "#dc2626", fontSize: 11, fontWeight: 600 }}>
+                    {fmt(subtotalDiff)} more
+                  </div>
+                )}
+              </div>
+              {/* Selection indicator */}
+              <div
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 99,
+                  border: `2px solid ${isSelected ? "var(--green)" : "var(--border)"}`,
+                  background: isSelected ? "var(--green)" : "white",
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transition: "all 0.15s",
+                }}
+              >
+                {isSelected && (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -202,30 +317,68 @@ function DetailsTable({ comparisons, items }: { comparisons: PriceComparison[]; 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: `1fr repeat(${top3.length}, 72px)`,
+          gridTemplateColumns: `1fr repeat(${top3.length}, 96px)`,
           padding: "10px 14px",
           background: "var(--bg)",
           borderBottom: "1px solid var(--border)",
-          fontSize: 11,
-          fontWeight: 700,
-          color: "var(--muted)",
           gap: 4,
         }}
       >
-        <span>Item</span>
-        {top3.map((c) => (
-          <span
-            key={c.retailer.id}
-            style={{
-              textAlign: "right",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {c.retailer.name.split(" ")[0]}
-          </span>
-        ))}
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", alignSelf: "center" }}>Item</span>
+        {top3.map((c, i) => {
+          const isCheapest = i === 0;
+          return (
+            <div
+              key={c.retailer.id}
+              style={{
+                textAlign: "right",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-end",
+                gap: 2,
+              }}
+            >
+              {isCheapest && (
+                <span
+                  style={{
+                    background: "var(--green)",
+                    color: "white",
+                    fontSize: 9,
+                    fontWeight: 700,
+                    borderRadius: 99,
+                    padding: "1px 6px",
+                    letterSpacing: "0.05em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Best
+                </span>
+              )}
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: isCheapest ? "var(--green)" : "var(--text)",
+                  lineHeight: 1.2,
+                }}
+              >
+                {c.retailer.name}
+              </span>
+              <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 500 }}>
+                ZIP {c.retailer.postalCode}
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: isCheapest ? "var(--green)" : "var(--muted)",
+                }}
+              >
+                {fmt(c.subtotal)}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {items.map((item, idx) => {
@@ -240,7 +393,7 @@ function DetailsTable({ comparisons, items }: { comparisons: PriceComparison[]; 
             key={item.id}
             style={{
               display: "grid",
-              gridTemplateColumns: `1fr repeat(${top3.length}, 72px)`,
+              gridTemplateColumns: `1fr repeat(${top3.length}, 96px)`,
               padding: "12px 14px",
               borderBottom: idx < items.length - 1 ? "1px solid var(--border)" : "none",
               alignItems: "center",
@@ -259,11 +412,30 @@ function DetailsTable({ comparisons, items }: { comparisons: PriceComparison[]; 
                 style={{
                   textAlign: "right",
                   fontWeight: p === minP && p > 0 ? 700 : 400,
-                  color: p === minP && p > 0 ? "var(--green)" : p > 0 ? "var(--text)" : "var(--border)",
+                  color: p === minP && p > 0 ? "var(--green)" : "var(--text)",
                   fontSize: 13,
                 }}
               >
-                {p > 0 ? fmt(p) : "—"}
+                {p > 0 ? (
+                  fmt(p)
+                ) : (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      background: "#fef2f2",
+                      color: "#dc2626",
+                      fontSize: 9,
+                      fontWeight: 700,
+                      borderRadius: 4,
+                      padding: "2px 5px",
+                      letterSpacing: "0.04em",
+                      textTransform: "uppercase",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Out of stock
+                  </span>
+                )}
               </span>
             ))}
           </div>
@@ -285,13 +457,25 @@ export default function RetailerComparison({
 }: Props) {
   const [revealed, setRevealed] = useState(false);
   const [activeTab, setActiveTab] = useState<"summary" | "details">("summary");
+  const [selectedIdx, setSelectedIdx] = useState(0);
 
   useEffect(() => {
     const t = setTimeout(() => setRevealed(true), 400);
     return () => clearTimeout(t);
   }, []);
 
-  if (comparisons.length === 0) {
+  // Reset selection to cheapest whenever comparisons change
+  useEffect(() => {
+    setSelectedIdx(0);
+  }, [comparisons]);
+
+  const allUnavailable =
+    comparisons.length > 0 &&
+    comparisons.every((c) => c.items.every((m) => m.price === 0));
+
+  const emptyOrUnavailable = comparisons.length === 0 || allUnavailable;
+
+  if (emptyOrUnavailable) {
     return (
       <div
         style={{
@@ -301,11 +485,38 @@ export default function RetailerComparison({
           alignItems: "center",
           justifyContent: "center",
           padding: "48px 24px",
-          color: "var(--muted)",
-          gap: 12,
+          gap: 16,
+          textAlign: "center",
         }}
       >
-        <div style={{ fontSize: 14 }}>No price comparison available yet.</div>
+        {allUnavailable ? (
+          <>
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: "50%",
+                background: "#fef2f2",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 22,
+              }}
+            >
+              🚫
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)", marginBottom: 6 }}>
+                None of your items are available
+              </div>
+              <div style={{ fontSize: 13, color: "var(--muted)", maxWidth: 280, lineHeight: 1.5 }}>
+                We couldn't find any of your items at nearby stores. Try updating your list or expanding your search radius.
+              </div>
+            </div>
+          </>
+        ) : (
+          <div style={{ fontSize: 14, color: "var(--muted)" }}>No price comparison available yet.</div>
+        )}
         <button
           onClick={() => onNavigate("list")}
           style={{
@@ -326,11 +537,12 @@ export default function RetailerComparison({
     );
   }
 
-  const winner = comparisons[0];
+  const cheapest = comparisons[0];
   const second = comparisons[1];
+  const selected = comparisons[selectedIdx];
 
   function handleOrder() {
-    setWinnerStore(winner.retailer);
+    setWinnerStore(selected.retailer);
     onNavigate("checkout");
   }
 
@@ -391,7 +603,13 @@ export default function RetailerComparison({
                 {pricingError}
               </div>
             )}
-            {activeTab === "summary" && <StoreList comparisons={comparisons} winner={winner} />}
+            {activeTab === "summary" && (
+              <StoreList
+                comparisons={comparisons}
+                selectedIdx={selectedIdx}
+                onSelect={setSelectedIdx}
+              />
+            )}
             {activeTab === "details" && <DetailsTable comparisons={comparisons} items={items} />}
             <div style={{ marginTop: 16 }}>
               <PriceDisclaimer />
@@ -399,7 +617,7 @@ export default function RetailerComparison({
           </div>
         </div>
 
-        {/* Right: winner hero + CTA */}
+        {/* Right: selected store hero + CTA */}
         <div
           style={{
             width: 340,
@@ -412,10 +630,11 @@ export default function RetailerComparison({
           }}
         >
           <div style={{ flex: 1, overflowY: "auto", padding: "24px" }}>
-            <WinnerCard winner={winner} second={second} revealed={revealed} />
+            <SelectedCard selected={selected} cheapest={cheapest} second={second} revealed={revealed} />
             <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6 }}>
-              Based on your {items.length} item{items.length !== 1 ? "s" : ""},{" "}
-              {winner.retailer.name} offers the best total price.
+              {selected.retailer.id === cheapest.retailer.id
+                ? `Based on your ${items.length} item${items.length !== 1 ? "s" : ""}, ${cheapest.retailer.name} offers the best total price.`
+                : `You've selected ${selected.retailer.name}. ${cheapest.retailer.name} has the lowest price for your list.`}
             </div>
           </div>
           <div style={{ padding: "20px", borderTop: "1px solid var(--border)" }}>
@@ -437,7 +656,7 @@ export default function RetailerComparison({
                 color: "white",
               }}
             >
-              Order from {winner.retailer.name} — {fmt(winner.subtotal)}
+              Order from {selected.retailer.name} — {fmt(selected.subtotal)}
             </button>
           </div>
         </div>
@@ -468,8 +687,8 @@ export default function RetailerComparison({
         )}
         {activeTab === "summary" && (
           <>
-            <WinnerCard winner={winner} second={second} revealed={revealed} />
-            <StoreList comparisons={comparisons} winner={winner} />
+            <SelectedCard selected={selected} cheapest={cheapest} second={second} revealed={revealed} />
+            <StoreList comparisons={comparisons} selectedIdx={selectedIdx} onSelect={setSelectedIdx} />
           </>
         )}
         {activeTab === "details" && <DetailsTable comparisons={comparisons} items={items} />}
@@ -507,10 +726,10 @@ export default function RetailerComparison({
             color: "white",
           }}
         >
-          Order from {winner.retailer.name} — {fmt(winner.subtotal)}
+          Order from {selected.retailer.name} — {fmt(selected.subtotal)}
         </button>
         <button
-          onClick={() => handleAddToCart(winner)}
+          onClick={() => handleAddToCart(selected)}
           disabled={cartLoading}
           style={{
             width: "100%",

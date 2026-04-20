@@ -325,7 +325,7 @@ export default function Dashboard() {
       </div>
       <span
         style={{
-          fontFamily: "var(--font-syne), Syne, sans-serif",
+          fontFamily: "Arial, sans-serif",
           fontWeight: 800,
           fontSize: 22,
           letterSpacing: "-0.02em",
@@ -446,7 +446,7 @@ export default function Dashboard() {
               </div>
               <div
                 style={{
-                  fontFamily: "var(--font-syne), Syne, sans-serif",
+                  fontFamily: "Arial, sans-serif",
                   fontWeight: 800,
                   fontSize: 20,
                   color: "white",
@@ -505,7 +505,7 @@ export default function Dashboard() {
           {isDesktop && (
             <div
               style={{
-                fontFamily: "var(--font-syne), Syne, sans-serif",
+                fontFamily: "Arial, sans-serif",
                 fontWeight: 700,
                 fontSize: 18,
                 color: "var(--text)",

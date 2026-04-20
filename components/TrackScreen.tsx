@@ -190,7 +190,7 @@ export default function TrackScreen({ items, winnerStore, onNavigate, isDesktop 
                 </div>
                 <div
                   style={{
-                    fontFamily: "var(--font-syne), Syne, sans-serif",
+                    fontFamily: "Arial, sans-serif",
                     fontWeight: 800,
                     fontSize: 48,
                     color: "white",
@@ -209,7 +209,7 @@ export default function TrackScreen({ items, winnerStore, onNavigate, isDesktop 
                 </div>
                 <div
                   style={{
-                    fontFamily: "var(--font-syne), Syne, sans-serif",
+                    fontFamily: "Arial, sans-serif",
                     fontWeight: 700,
                     fontSize: 18,
                     color: "white",
@@ -296,7 +296,7 @@ export default function TrackScreen({ items, winnerStore, onNavigate, isDesktop 
               style={{
                 fontWeight: 800,
                 fontSize: 16,
-                fontFamily: "var(--font-syne), Syne, sans-serif",
+                fontFamily: "Arial, sans-serif",
                 marginBottom: 2,
               }}
             >
@@ -355,7 +355,7 @@ export default function TrackScreen({ items, winnerStore, onNavigate, isDesktop 
         </div>
         <div
           style={{
-            fontFamily: "var(--font-syne), Syne, sans-serif",
+            fontFamily: "Arial, sans-serif",
             fontWeight: 800,
             fontSize: 42,
             color: "white",
