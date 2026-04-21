@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import type { GroceryItem, Retailer, PriceComparison } from "@/lib/types";
 import PriceDisclaimer from "./PriceDisclaimer";
+import ErrorBanner from "./ErrorBanner";
 
 interface Props {
   items: GroceryItem[];
@@ -36,33 +36,6 @@ function SectionLabel({ title }: { title: string }) {
   );
 }
 
-function CardIcon() {
-  return (
-    <div
-      style={{
-        width: 36,
-        height: 24,
-        background: "#1a1a2e",
-        borderRadius: 4,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-      }}
-    >
-      <div
-        style={{
-          width: 20,
-          height: 14,
-          borderRadius: 2,
-          background: "linear-gradient(135deg,#f59e0b,#ef4444)",
-          opacity: 0.9,
-        }}
-      />
-    </div>
-  );
-}
-
 export default function CheckoutScreen({
   items,
   winnerStore,
@@ -73,21 +46,9 @@ export default function CheckoutScreen({
   pricingError,
   isDesktop,
 }: Props) {
-  const [address, setAddress] = useState("");
-  const [timeSlot, setTimeSlot] = useState(0);
-  const [tip, setTip] = useState(1);
-
   const winnerComparison =
     comparisons.find((c) => c.retailer.id === winnerStore?.id) ?? comparisons[0];
   const subtotal = winnerComparison?.subtotal ?? 0;
-
-  const tipLabels = ["None", "10%", "15%", "20%"];
-  const tipAmounts = [0, subtotal * 0.1, subtotal * 0.15, subtotal * 0.2];
-  const slots = ["ASAP (45–60 min)", "Today 2–4 PM", "Today 4–6 PM", "Tomorrow 9–11 AM"];
-  const serviceFee = 2.99;
-  const deliveryFee = 3.49;
-  const grandTotal = subtotal + serviceFee + deliveryFee + tipAmounts[tip];
-
   const store = winnerStore ?? winnerComparison?.retailer ?? null;
 
   if (!store || !winnerComparison) {
@@ -125,90 +86,6 @@ export default function CheckoutScreen({
     );
   }
 
-  function handlePlaceOrder() {
-    handleAddToCart(winnerComparison!);
-  }
-
-  const deliveryFields = (
-    <>
-      {/* Address */}
-      <div style={{ marginBottom: 24 }}>
-        <SectionLabel title="Delivery Address" />
-        <input
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          placeholder="Enter your delivery address"
-          style={{
-            width: "100%",
-            padding: "12px",
-            border: "1.5px solid var(--border)",
-            borderRadius: 10,
-            fontFamily: "inherit",
-            fontSize: 14,
-            outline: "none",
-            boxSizing: "border-box",
-          }}
-        />
-      </div>
-
-      {/* Time slots */}
-      <div style={{ marginBottom: 24 }}>
-        <SectionLabel title="Delivery Time" />
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {slots.map((s, i) => (
-            <label
-              key={i}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "12px",
-                borderRadius: 10,
-                border: `1.5px solid ${timeSlot === i ? "var(--green)" : "var(--border)"}`,
-                background: timeSlot === i ? "var(--green-light)" : "white",
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="radio"
-                checked={timeSlot === i}
-                onChange={() => setTimeSlot(i)}
-                style={{ accentColor: "var(--green)" }}
-              />
-              <span style={{ fontSize: 13, fontWeight: timeSlot === i ? 600 : 400 }}>{s}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      {/* Tip */}
-      <div style={{ marginBottom: 24 }}>
-        <SectionLabel title="Shopper Tip" />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
-          {tipLabels.map((l, i) => (
-            <button
-              key={i}
-              onClick={() => setTip(i)}
-              style={{
-                padding: "10px 8px",
-                borderRadius: 10,
-                fontFamily: "inherit",
-                border: `1.5px solid ${tip === i ? "var(--green)" : "var(--border)"}`,
-                background: tip === i ? "var(--green-light)" : "white",
-                color: tip === i ? "var(--green)" : "var(--text)",
-                fontWeight: tip === i ? 700 : 400,
-                cursor: "pointer",
-                fontSize: 13,
-              }}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
-      </div>
-    </>
-  );
-
   const storeBanner = (
     <div
       style={{
@@ -240,9 +117,12 @@ export default function CheckoutScreen({
       >
         {store.name[0]}
       </div>
-      <div>
+      <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 700 }}>{store.name}</div>
         <div style={{ fontSize: 12, color: "var(--muted)" }}>{store.postalCode}</div>
+      </div>
+      <div style={{ fontWeight: 700, color: "var(--green)", fontSize: 15 }}>
+        {fmt(subtotal)}
       </div>
     </div>
   );
@@ -271,88 +151,69 @@ export default function CheckoutScreen({
           </div>
         );
       })}
-    </div>
-  );
-
-  const totalsBreakdown = (
-    <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
-      {([
-        ["Subtotal", fmt(subtotal)],
-        ["Delivery fee", fmt(deliveryFee)],
-        ["Service fee", fmt(serviceFee)],
-        ["Shopper tip", fmt(tipAmounts[tip])],
-      ] as [string, string][]).map(([k, v]) => (
-        <div
-          key={k}
-          style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}
-        >
-          <span style={{ color: "var(--muted)" }}>{k}</span>
-          <span>{v}</span>
-        </div>
-      ))}
       <div
         style={{
           borderTop: "1px solid var(--border)",
-          marginTop: 8,
+          marginTop: 10,
           paddingTop: 10,
           display: "flex",
           justifyContent: "space-between",
           fontWeight: 700,
-          fontSize: 16,
+          fontSize: 15,
         }}
       >
-        <span>Total</span>
-        <span style={{ color: "var(--green)" }}>{fmt(grandTotal)}</span>
+        <span>Estimated subtotal</span>
+        <span style={{ color: "var(--green)" }}>{fmt(subtotal)}</span>
       </div>
     </div>
   );
 
-  const paymentRow = (
+  const handoffNote = (
     <div
       style={{
-        marginTop: 16,
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-start",
         gap: 10,
-        padding: "12px",
-        border: "1.5px solid var(--green)",
+        padding: "12px 14px",
+        background: "#f0fdf4",
         borderRadius: 10,
-        background: "var(--green-light)",
+        border: "1px solid rgba(22,163,74,0.2)",
+        marginBottom: 16,
+        fontSize: 13,
+        color: "var(--muted)",
+        lineHeight: 1.5,
       }}
     >
-      <CardIcon />
-      <span style={{ fontWeight: 600, fontSize: 13 }}>Visa ending in 4242</span>
-      <svg style={{ marginLeft: "auto" }} width="16" height="16" viewBox="0 0 24 24" fill="none">
-        <path d="m9 18 6-6-6-6" stroke="var(--green)" strokeWidth="2" strokeLinecap="round" />
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        style={{ flexShrink: 0, marginTop: 1 }}
+      >
+        <circle cx="12" cy="12" r="10" stroke="var(--green)" strokeWidth="2" />
+        <path d="M12 7v5l3 3" stroke="var(--green)" strokeWidth="2" strokeLinecap="round" />
       </svg>
+      <span>
+        Clicking <strong style={{ color: "var(--text)" }}>Checkout at Kroger</strong> will add
+        your items to your Kroger cart. You&apos;ll complete the order — including delivery or
+        pickup options — directly on kroger.com.
+      </span>
     </div>
   );
 
-  const errorBanner = pricingError ? (
-    <div
-      style={{
-        background: "#fef2f2",
-        border: "1px solid #fecaca",
-        borderRadius: 10,
-        padding: "10px 14px",
-        fontSize: 13,
-        color: "#dc2626",
-        marginBottom: 16,
-      }}
-    >
-      {pricingError}
-    </div>
-  ) : null;
+  const errorBanner = pricingError ? <ErrorBanner message={pricingError} /> : null;
 
-  const placeOrderBtn = (
+  const checkoutBtn = (
     <button
-      onClick={handlePlaceOrder}
+      onClick={() => handleAddToCart(winnerComparison)}
       disabled={cartLoading}
       style={{
         width: "100%",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        gap: 8,
         padding: "14px 24px",
         borderRadius: 14,
         fontFamily: "inherit",
@@ -365,22 +226,110 @@ export default function CheckoutScreen({
         opacity: cartLoading ? 0.65 : 1,
       }}
     >
-      {cartLoading ? "Placing order…" : `Place order · ${fmt(grandTotal)}`}
+      {cartLoading ? (
+        "Loading…"
+      ) : (
+        <>
+          Checkout at Kroger
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M7 17L17 7M17 7H7M17 7v10"
+              stroke="white"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </>
+      )}
     </button>
+  );
+
+  const summaryContent = (
+    <>
+      <div
+        style={{
+          fontWeight: 800,
+          fontSize: 16,
+          fontFamily: "Arial, sans-serif",
+          marginBottom: 16,
+        }}
+      >
+        Order Summary
+      </div>
+      {storeBanner}
+      <SectionLabel title="Items" />
+      {itemRows}
+      {handoffNote}
+      <PriceDisclaimer />
+    </>
   );
 
   // ── Desktop ──────────────────────────────────────────────────────────────────
   if (isDesktop) {
     return (
       <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
-        <div style={{ flex: 1, overflowY: "auto", padding: "28px 32px" }}>
-          {errorBanner}
-          {deliveryFields}
-        </div>
-
+        {/* Left: context */}
         <div
           style={{
-            width: 360,
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "48px 64px",
+            gap: 16,
+          }}
+        >
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 20,
+              background: "var(--green-light)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"
+                fill="rgba(22,163,74,0.12)"
+                stroke="var(--green)"
+                strokeWidth="1.8"
+              />
+              <path d="M3 6h18" stroke="var(--green)" strokeWidth="1.8" />
+              <path d="M16 10a4 4 0 01-8 0" stroke="var(--green)" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div
+            style={{
+              fontFamily: "Arial, sans-serif",
+              fontWeight: 800,
+              fontSize: 24,
+              textAlign: "center",
+            }}
+          >
+            Ready to checkout?
+          </div>
+          <div
+            style={{
+              fontSize: 14,
+              color: "var(--muted)",
+              textAlign: "center",
+              maxWidth: 320,
+              lineHeight: 1.6,
+            }}
+          >
+            We&apos;ll pre-load your shopping cart with Kroger for an easy checkout!
+          </div>
+        </div>
+
+        {/* Right: summary + button */}
+        <div
+          style={{
+            width: 380,
             flexShrink: 0,
             background: "white",
             borderLeft: "1px solid var(--border)",
@@ -390,26 +339,11 @@ export default function CheckoutScreen({
           }}
         >
           <div style={{ flex: 1, overflowY: "auto", padding: "24px" }}>
-            <div
-              style={{
-                fontWeight: 800,
-                fontSize: 16,
-                fontFamily: "Arial, sans-serif",
-                marginBottom: 16,
-              }}
-            >
-              Order Summary
-            </div>
-            {storeBanner}
-            {itemRows}
-            {totalsBreakdown}
-            {paymentRow}
-            <div style={{ marginTop: 12 }}>
-              <PriceDisclaimer />
-            </div>
+            {errorBanner}
+            {summaryContent}
           </div>
           <div style={{ padding: "20px", borderTop: "1px solid var(--border)" }}>
-            {placeOrderBtn}
+            {checkoutBtn}
           </div>
         </div>
       </div>
@@ -420,76 +354,9 @@ export default function CheckoutScreen({
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
-        {/* Store banner */}
-        <div
-          style={{
-            background: "var(--green-light)",
-            borderRadius: 14,
-            padding: "14px 16px",
-            marginBottom: 16,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            border: "1px solid rgba(22,163,74,0.2)",
-          }}
-        >
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              background: "var(--green)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontFamily: "Arial, sans-serif",
-              fontWeight: 800,
-              fontSize: 16,
-              color: "white",
-              flexShrink: 0,
-            }}
-          >
-            {store.name[0]}
-          </div>
-          <div>
-            <div style={{ fontWeight: 700 }}>{store.name}</div>
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>{store.postalCode}</div>
-          </div>
-          <div style={{ marginLeft: "auto", fontWeight: 700, color: "var(--green)", fontSize: 15 }}>
-            {fmt(subtotal)}
-          </div>
-        </div>
-
         {errorBanner}
-        {deliveryFields}
-
-        <div style={{ marginBottom: 24 }}>
-          <SectionLabel title="Order Summary" />
-          {itemRows}
-          {totalsBreakdown}
-        </div>
-
-        <div style={{ marginBottom: 24 }}>
-          <SectionLabel title="Payment" />
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "12px",
-              border: "1.5px solid var(--green)",
-              borderRadius: 10,
-              background: "var(--green-light)",
-            }}
-          >
-            <CardIcon />
-            <span style={{ fontWeight: 600, fontSize: 13 }}>Visa ending in 4242</span>
-          </div>
-        </div>
-
-        <PriceDisclaimer />
+        {summaryContent}
       </div>
-
       <div
         style={{
           padding: "16px",
@@ -498,7 +365,7 @@ export default function CheckoutScreen({
           flexShrink: 0,
         }}
       >
-        {placeOrderBtn}
+        {checkoutBtn}
       </div>
     </div>
   );

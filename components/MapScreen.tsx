@@ -17,6 +17,7 @@ interface Props {
   selectedStore: Retailer | null;
   setSelectedStore: (s: Retailer | null) => void;
   onNavigate: (screen: "map" | "list" | "compare" | "checkout" | "track") => void;
+  userLatLng: [number, number] | null;
   isDesktop: boolean;
 }
 
@@ -73,6 +74,7 @@ export default function MapScreen({
   selectedStore,
   setSelectedStore,
   onNavigate,
+  userLatLng,
   isDesktop,
 }: Props) {
   const visible = stores;
@@ -109,7 +111,7 @@ export default function MapScreen({
             </div>
           )}
           {stores.length > 0 && (
-            <StoreMap stores={stores} radiusInMiles={radius} bestStoreId={selectedStore?.id} />
+            <StoreMap stores={stores} radiusInMiles={radius} bestStoreId={selectedStore?.id} userLatLng={userLatLng} />
           )}
           {storesLoading && (
             <div
@@ -403,7 +405,7 @@ export default function MapScreen({
             </p>
           </div>
         ) : (
-          <StoreMap stores={stores} radiusInMiles={radius} bestStoreId={selectedStore?.id} />
+          <StoreMap stores={stores} radiusInMiles={radius} bestStoreId={selectedStore?.id} userLatLng={userLatLng} />
         )}
 
         {storesLoading && (

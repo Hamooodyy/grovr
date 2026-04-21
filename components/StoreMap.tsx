@@ -30,10 +30,25 @@ function makePin(fill: string, stroke: string) {
 const defaultPin = makePin("#3b82f6", "#1d4ed8");
 const bestPin    = makePin("#16a34a", "#14532d");
 
+const userPin = L.divIcon({
+  html: `<div style="
+    width:18px;height:18px;
+    border-radius:50%;
+    background:#2563eb;
+    border:3px solid white;
+    box-shadow:0 0 0 3px rgba(37,99,235,0.35),0 2px 6px rgba(0,0,0,0.25);
+  "></div>`,
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+  popupAnchor: [0, -12],
+  className: "",
+});
+
 interface Props {
   stores: Retailer[];
   radiusInMiles: number;
   bestStoreId?: string;
+  userLatLng?: [number, number] | null;
 }
 
 function MapController({ center, radiusMeters }: { center: [number, number]; radiusMeters: number }) {
@@ -54,14 +69,15 @@ function MapController({ center, radiusMeters }: { center: [number, number]; rad
   return null;
 }
 
-export default function StoreMap({ stores, radiusInMiles, bestStoreId }: Props) {
+export default function StoreMap({ stores, radiusInMiles, bestStoreId, userLatLng }: Props) {
   const valid = stores.filter((s) => s.lat != null && s.lng != null);
   if (valid.length === 0) return null;
 
-  const center: [number, number] = [
+  const storeAvg: [number, number] = [
     valid.reduce((sum, s) => sum + s.lat!, 0) / valid.length,
     valid.reduce((sum, s) => sum + s.lng!, 0) / valid.length,
   ];
+  const center: [number, number] = userLatLng ?? storeAvg;
   const radiusMeters = radiusInMiles * 1609.34;
 
   return (
@@ -101,6 +117,13 @@ export default function StoreMap({ stores, radiusInMiles, bestStoreId }: Props) 
             </Popup>
           </Marker>
         ))}
+        {userLatLng && (
+          <Marker position={userLatLng} icon={userPin}>
+            <Popup>
+              <p className="text-sm font-semibold text-zinc-900">Your location</p>
+            </Popup>
+          </Marker>
+        )}
       </MapContainer>
     </div>
   );

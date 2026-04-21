@@ -94,8 +94,6 @@ const TITLES: Record<Screen, string> = {
   track: "Order Tracking",
 };
 
-let itemCounter = 0;
-
 export default function Dashboard() {
   const [screen, setScreen] = useState<Screen>("map");
   const [isDesktop, setIsDesktop] = useState(false);
@@ -115,6 +113,7 @@ export default function Dashboard() {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationName, setLocationName] = useState<string | null>(null);
+  const [userLatLng, setUserLatLng] = useState<[number, number] | null>(null);
 
   const zipDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const radiusDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -126,12 +125,21 @@ export default function Dashboard() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  // Clear any pending debounce timers when the component unmounts
+  useEffect(() => {
+    return () => {
+      if (zipDebounceRef.current) clearTimeout(zipDebounceRef.current);
+      if (radiusDebounceRef.current) clearTimeout(radiusDebounceRef.current);
+    };
+  }, []);
+
   // ── Auto-detect location ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!navigator.geolocation) return;
     setLocationLoading(true);
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
+        setUserLatLng([coords.latitude, coords.longitude]);
         try {
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${coords.latitude}&lon=${coords.longitude}&format=json`,
@@ -171,7 +179,7 @@ export default function Dashboard() {
 
   // ── Item management ─────────────────────────────────────────────────────────
   function addItem(partial: Omit<GroceryItem, "id">) {
-    setItems((prev) => [...prev, { ...partial, id: String(++itemCounter) }]);
+    setItems((prev) => [...prev, { ...partial, id: crypto.randomUUID() }]);
   }
   function removeItem(id: string) {
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -281,6 +289,8 @@ export default function Dashboard() {
           if (authRes.ok) {
             const { url } = (await authRes.json()) as { url: string };
             window.location.href = url;
+          } else {
+            setPricingError("Failed to start Kroger authorization. Please try again.");
           }
           return;
         }
@@ -363,6 +373,7 @@ export default function Dashboard() {
     handleAddToCart,
     onNavigate: setScreen,
     locationId,
+    userLatLng,
     isDesktop,
   };
 
