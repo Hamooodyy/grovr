@@ -1,6 +1,6 @@
 # Grovr
 
-Grovr is a grocery price comparison MVP that takes the guesswork out of price comparison shopping. Grovr analyzes prices for a user's cart across nearby grocery stores, and recommends placing orders at the location that meets their brand, delivery, and pricing criteria
+Grovr is a grocery tool that takes the guesswork out of price comparison shopping. Grovr analyzes prices for a user's cart across nearby grocery stores, and recommends placing orders at the location that meets their brand, delivery, and pricing criteria
 
 ## Features
 
