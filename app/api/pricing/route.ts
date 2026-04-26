@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { searchProduct } from "@/lib/provider";
 import { compareRetailerPrices } from "@/lib/pricing";
 import type { GroceryItem, Retailer } from "@/lib/types";
@@ -33,11 +34,13 @@ export async function POST(request: Request) {
   }));
 
   try {
+    const { userId } = await auth();
+
     // Fan out: search every item at every store in parallel
     const retailerMatches = await Promise.all(
       stores.map(async (store) => {
         const matches = await Promise.all(
-          sanitizedItems.map((item) => searchProduct(item, store.id))
+          sanitizedItems.map((item) => searchProduct(item, store.id, userId ?? undefined))
         );
         return { retailer: store, items: matches };
       })

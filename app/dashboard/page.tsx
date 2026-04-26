@@ -8,6 +8,7 @@ import ShoppingList from "@/components/ShoppingList";
 import RetailerComparison from "@/components/RetailerComparison";
 import CheckoutScreen from "@/components/CheckoutScreen";
 import TrackScreen from "@/components/TrackScreen";
+import InstacartConnect from "@/components/InstacartConnect";
 
 const MapScreen = dynamic(() => import("@/components/MapScreen"), { ssr: false });
 
@@ -101,7 +102,7 @@ export default function Dashboard() {
   // Shared state
   const [items, setItems] = useState<GroceryItem[]>([]);
   const [zip, setZip] = useState("");
-  const [radius, setRadius] = useState(10);
+  const [radius, setRadius] = useState(5);
   const [stores, setStores] = useState<Retailer[]>([]);
   const [storesLoading, setStoresLoading] = useState(false);
   const [selectedStore, setSelectedStore] = useState<Retailer | null>(null);
@@ -114,6 +115,7 @@ export default function Dashboard() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationName, setLocationName] = useState<string | null>(null);
   const [userLatLng, setUserLatLng] = useState<[number, number] | null>(null);
+  const [hadZip, setHadZip] = useState(false);
 
   const zipDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const radiusDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -159,6 +161,7 @@ export default function Dashboard() {
             try {
               const updated = await fetchStores(zip, radius);
               setStores(updated);
+              setHadZip(true);
             } catch {
               // non-fatal
             } finally {
@@ -208,6 +211,7 @@ export default function Dashboard() {
         const updated = await fetchStores(value.trim(), radius);
         setStores(updated);
         setComparisons([]);
+        setHadZip(true);
       } catch {
         // non-fatal
       } finally {
@@ -375,6 +379,7 @@ export default function Dashboard() {
     locationId,
     userLatLng,
     isDesktop,
+    hadZip,
   };
 
   return (
@@ -382,6 +387,8 @@ export default function Dashboard() {
       style={{
         display: "flex",
         height: "100vh",
+        width: "100vw",
+        overflow: "hidden",
         background: isDesktop ? "#0e1f14" : "var(--bg)",
       }}
     >
@@ -469,6 +476,10 @@ export default function Dashboard() {
           )}
 
           <div style={{ marginBottom: 12 }}>
+            <InstacartConnect />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
             <UserButton />
           </div>
 
@@ -493,6 +504,7 @@ export default function Dashboard() {
       <div
         style={{
           flex: 1,
+          minWidth: 0,
           display: "flex",
           flexDirection: "column",
           background: "var(--bg)",
@@ -555,8 +567,15 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Instacart connection banner — mobile only */}
+        {!isDesktop && (
+          <div style={{ padding: "10px 16px 0", background: "var(--bg)" }}>
+            <InstacartConnect />
+          </div>
+        )}
+
         {/* Screen content */}
-        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
           {screen === "map" && <MapScreen {...screenProps} />}
           {screen === "list" && <ShoppingList {...screenProps} />}
           {screen === "compare" && <RetailerComparison {...screenProps} />}

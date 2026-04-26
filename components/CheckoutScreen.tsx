@@ -268,7 +268,7 @@ export default function CheckoutScreen({
   // ── Desktop ──────────────────────────────────────────────────────────────────
   if (isDesktop) {
     return (
-      <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
+      <div style={{ display: "flex", flex: 1, minHeight: 0, width: "100%", overflow: "hidden" }}>
         {/* Left: context */}
         <div
           style={{
@@ -352,7 +352,7 @@ export default function CheckoutScreen({
 
   // ── Mobile ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, width: "100%" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
         {errorBanner}
         {summaryContent}

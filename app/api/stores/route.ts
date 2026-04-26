@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { getNearbyStores } from "@/lib/provider";
 
 export async function GET(request: Request) {
@@ -19,7 +20,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const stores = await getNearbyStores(zip, radius);
+    const { userId } = await auth();
+    const stores = await getNearbyStores(zip, radius, userId ?? undefined);
     return NextResponse.json({ stores });
   } catch (err) {
     console.error("[api/stores]", err);

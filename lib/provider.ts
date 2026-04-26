@@ -16,11 +16,17 @@ const USE_SCRAPER = process.env.USE_SCRAPER === "true";
 
 export async function getNearbyStores(
   zipCode: string,
-  radiusInMiles?: number
+  radiusInMiles?: number,
+  userId?: string
 ): ReturnType<typeof import("./kroger").getNearbyStores> {
   if (USE_SCRAPER) {
     const { getStores } = await import("./scraper");
-    return getStores(zipCode, radiusInMiles);
+    let cookies: string | null = null;
+    if (userId) {
+      const { getInstacartCookies } = await import("./instacart-session");
+      cookies = await getInstacartCookies(userId);
+    }
+    return getStores(zipCode, radiusInMiles, cookies);
   }
   const { getNearbyStores: krogerGetNearbyStores } = await import("./kroger");
   return krogerGetNearbyStores(zipCode, radiusInMiles);
@@ -32,21 +38,32 @@ export async function getNearbyStores(
 
 export async function searchProduct(
   ...args: Parameters<typeof import("./kroger").searchProduct>
+): ReturnType<typeof import("./kroger").searchProduct>;
+export async function searchProduct(
+  item: import("./types").GroceryItem,
+  locationId: string,
+  userId?: string
+): ReturnType<typeof import("./kroger").searchProduct>;
+export async function searchProduct(
+  item: import("./types").GroceryItem,
+  locationId: string,
+  userId?: string
 ): ReturnType<typeof import("./kroger").searchProduct> {
   if (USE_SCRAPER) {
     const { scrapeProduct } = await import("./scraper");
-    const [item, locationId] = args;
-    // scrapeProduct needs a Retailer object; reconstruct a minimal one from
-    // the locationId (which is a store slug when coming from the scraper path)
-    return scrapeProduct(item, {
-      id: locationId,
-      name: locationId,
-      logoUrl: "",
-      postalCode: "",
-    });
+    let cookies: string | null = null;
+    if (userId) {
+      const { getInstacartCookies } = await import("./instacart-session");
+      cookies = await getInstacartCookies(userId);
+    }
+    return scrapeProduct(
+      item,
+      { id: locationId, name: locationId, logoUrl: "", postalCode: "" },
+      cookies
+    );
   }
   const { searchProduct: krogerSearchProduct } = await import("./kroger");
-  return krogerSearchProduct(...args);
+  return krogerSearchProduct(item, locationId);
 }
 
 // ---------------------------------------------------------------------------

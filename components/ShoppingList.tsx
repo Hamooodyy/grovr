@@ -525,7 +525,7 @@ export default function ShoppingList({
   // ── Desktop layout ──────────────────────────────────────────────────────────
   if (isDesktop) {
     return (
-      <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
+      <div style={{ display: "flex", flex: 1, minHeight: 0, width: "100%", overflow: "hidden" }}>
         {/* Left: list */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div
@@ -721,7 +721,7 @@ export default function ShoppingList({
 
   // ── Mobile layout ───────────────────────────────────────────────────────────
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, width: "100%" }}>
       <div
         style={{
           padding: "16px 16px 0",

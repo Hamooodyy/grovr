@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import type { PriceComparison, Retailer, GroceryItem } from "@/lib/types";
 import PriceDisclaimer from "./PriceDisclaimer";
+import ErrorBanner from "./ErrorBanner";
 
 interface Props {
   comparisons: PriceComparison[];
@@ -458,16 +459,20 @@ export default function RetailerComparison({
   const [revealed, setRevealed] = useState(false);
   const [activeTab, setActiveTab] = useState<"summary" | "details">("summary");
   const [selectedIdx, setSelectedIdx] = useState(0);
+  // Track the previous comparisons reference so we can reset selectedIdx during
+  // render when new results arrive — this is the React-endorsed alternative to
+  // calling setState inside a useEffect.
+  const [prevComparisons, setPrevComparisons] = useState(comparisons);
+  if (comparisons !== prevComparisons) {
+    setPrevComparisons(comparisons);
+    setSelectedIdx(0);
+  }
 
   useEffect(() => {
     const t = setTimeout(() => setRevealed(true), 400);
     return () => clearTimeout(t);
   }, []);
 
-  // Reset selection to cheapest whenever comparisons change
-  useEffect(() => {
-    setSelectedIdx(0);
-  }, [comparisons]);
 
   const allUnavailable =
     comparisons.length > 0 &&
@@ -510,7 +515,7 @@ export default function RetailerComparison({
                 None of your items are available
               </div>
               <div style={{ fontSize: 13, color: "var(--muted)", maxWidth: 280, lineHeight: 1.5 }}>
-                We couldn't find any of your items at nearby stores. Try updating your list or expanding your search radius.
+                We couldn&apos;t find any of your items at nearby stores. Try updating your list or expanding your search radius.
               </div>
             </div>
           </>
@@ -583,26 +588,12 @@ export default function RetailerComparison({
   // ── Desktop ──────────────────────────────────────────────────────────────────
   if (isDesktop) {
     return (
-      <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
+      <div style={{ display: "flex", flex: 1, minHeight: 0, width: "100%", overflow: "hidden" }}>
         {/* Left: tabs + view */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {tabBar}
           <div style={{ flex: 1, overflowY: "auto", padding: "24px" }}>
-            {pricingError && (
-              <div
-                style={{
-                  background: "#fef2f2",
-                  border: "1px solid #fecaca",
-                  borderRadius: 10,
-                  padding: "10px 14px",
-                  fontSize: 13,
-                  color: "#dc2626",
-                  marginBottom: 16,
-                }}
-              >
-                {pricingError}
-              </div>
-            )}
+            {pricingError && <ErrorBanner message={pricingError} />}
             {activeTab === "summary" && (
               <StoreList
                 comparisons={comparisons}
@@ -666,25 +657,11 @@ export default function RetailerComparison({
 
   // ── Mobile ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, width: "100%" }}>
       {tabBar}
 
       <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px" }}>
-        {pricingError && (
-          <div
-            style={{
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              borderRadius: 10,
-              padding: "10px 14px",
-              fontSize: 13,
-              color: "#dc2626",
-              marginBottom: 16,
-            }}
-          >
-            {pricingError}
-          </div>
-        )}
+        {pricingError && <ErrorBanner message={pricingError} />}
         {activeTab === "summary" && (
           <>
             <SelectedCard selected={selected} cheapest={cheapest} second={second} revealed={revealed} />

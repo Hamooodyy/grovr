@@ -1,9 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import type { Retailer } from "@/lib/types";
 
 const StoreMap = dynamic(() => import("./StoreMap"), { ssr: false });
+
+async function reverseGeocodeToZip(lat: number, lon: number): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+      { headers: { "Accept-Language": "en" } }
+    );
+    const data = (await res.json()) as { address?: { postcode?: string } };
+    return data.address?.postcode?.split("-")[0] ?? null;
+  } catch {
+    return null;
+  }
+}
 
 interface Props {
   stores: Retailer[];
@@ -19,6 +33,7 @@ interface Props {
   onNavigate: (screen: "map" | "list" | "compare" | "checkout" | "track") => void;
   userLatLng: [number, number] | null;
   isDesktop: boolean;
+  hadZip?: boolean; // true if a ZIP was submitted but stores came back empty
 }
 
 function Btn({
@@ -76,12 +91,56 @@ export default function MapScreen({
   onNavigate,
   userLatLng,
   isDesktop,
+  hadZip,
 }: Props) {
   const visible = stores;
+  const [locating, setLocating] = useState(false);
+
+  async function detectLocation() {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        const detected = await reverseGeocodeToZip(coords.latitude, coords.longitude);
+        if (detected) setZip(detected);
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { timeout: 8000 }
+    );
+  }
+
+  const LocationBtn = () => (
+    <button
+      onClick={detectLocation}
+      disabled={locating}
+      title="Use my location"
+      style={{
+        position: "absolute",
+        right: 8,
+        top: "50%",
+        transform: "translateY(-50%)",
+        background: "none",
+        border: "none",
+        cursor: locating ? "default" : "pointer",
+        padding: 4,
+        display: "flex",
+        alignItems: "center",
+        color: "var(--green)",
+        opacity: locating ? 0.5 : 1,
+      }}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="3" fill="var(--green)" />
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="var(--green)" strokeWidth="2" strokeLinecap="round" />
+        <circle cx="12" cy="12" r="7" stroke="var(--green)" strokeWidth="1.5" />
+      </svg>
+    </button>
+  );
 
   if (isDesktop) {
     return (
-      <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
+      <div style={{ display: "flex", flex: 1, minHeight: 0, width: "100%", overflow: "hidden" }}>
         {/* Map */}
         <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
           {stores.length === 0 && !storesLoading && (
@@ -105,8 +164,12 @@ export default function MapScreen({
                   strokeWidth="1.5"
                 />
               </svg>
-              <p style={{ color: "#888", fontSize: 14, textAlign: "center" }}>
-                {locationLoading ? "Detecting your location…" : "Enter your ZIP code to see nearby stores"}
+              <p style={{ color: "#888", fontSize: 14, textAlign: "center", maxWidth: 260, lineHeight: 1.5 }}>
+                {locationLoading
+                  ? "Detecting your location…"
+                  : hadZip
+                  ? "No stores found. Your Instacart session may have expired — try disconnecting and reconnecting."
+                  : "Enter your ZIP code to see nearby stores"}
               </p>
             </div>
           )}
@@ -187,8 +250,9 @@ export default function MapScreen({
                       onChange={(e) => setZip(e.target.value)}
                       placeholder="e.g. 45202"
                       maxLength={10}
-                      style={{ width: "100%", padding: "10px 10px 10px 34px", border: "1.5px solid var(--border)", borderRadius: 10, fontFamily: "inherit", fontSize: 13, color: "#0e1f14", outline: "none", boxSizing: "border-box" }}
+                      style={{ width: "100%", padding: "10px 34px 10px 34px", border: "1.5px solid var(--border)", borderRadius: 10, fontFamily: "inherit", fontSize: 13, color: "#0e1f14", outline: "none", boxSizing: "border-box" }}
                     />
+                    <LocationBtn />
                   </div>
                 </>
               )}
@@ -305,7 +369,7 @@ export default function MapScreen({
 
   // Mobile layout
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, width: "100%", overflow: "hidden" }}>
       {/* Controls bar */}
       <div
         style={{
@@ -346,8 +410,9 @@ export default function MapScreen({
                 onChange={(e) => setZip(e.target.value)}
                 placeholder="Enter ZIP code"
                 maxLength={10}
-                style={{ width: "100%", padding: "10px 10px 10px 34px", border: "1.5px solid var(--border)", borderRadius: 10, fontFamily: "inherit", fontSize: 14, color: "#0e1f14", outline: "none", boxSizing: "border-box" }}
+                style={{ width: "100%", padding: "10px 34px 10px 34px", border: "1.5px solid var(--border)", borderRadius: 10, fontFamily: "inherit", fontSize: 14, color: "#0e1f14", outline: "none", boxSizing: "border-box" }}
               />
+              <LocationBtn />
             </div>
           )}
         </div>
@@ -400,8 +465,10 @@ export default function MapScreen({
                 strokeWidth="1.5"
               />
             </svg>
-            <p style={{ color: "#888", fontSize: 13, textAlign: "center" }}>
-              Enter your ZIP code above to find nearby stores
+            <p style={{ color: "#888", fontSize: 13, textAlign: "center", maxWidth: 240, lineHeight: 1.5 }}>
+              {hadZip
+                ? "No stores found. Your Instacart session may have expired — try reconnecting."
+                : "Enter your ZIP code above to find nearby stores"}
             </p>
           </div>
         ) : (
