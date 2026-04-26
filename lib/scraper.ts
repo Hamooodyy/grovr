@@ -195,6 +195,74 @@ const SLUG_MAP: Record<string, string> = {
   "market basket":       "market-basket",
 };
 
+/**
+ * Canonical display names keyed by the Instacart slug.
+ * Used when the scraped innerText/alt is empty or is itself a slug.
+ * Covers regional slug variants (e.g. "giant-food-dcp") via prefix matching.
+ */
+const SLUG_DISPLAY_NAMES: Record<string, string> = {
+  "kroger":            "Kroger",
+  "ralphs":            "Ralphs",
+  "fred-meyer":        "Fred Meyer",
+  "king-soopers":      "King Soopers",
+  "smiths":            "Smith's",
+  "frys":              "Fry's",
+  "harris-teeter":     "Harris Teeter",
+  "city-market":       "City Market",
+  "marianos":          "Mariano's",
+  "pay-less":          "Pay-Less",
+  "qfc":               "QFC",
+  "pick-n-save":       "Pick 'n Save",
+  "bakers":            "Baker's",
+  "safeway":           "Safeway",
+  "albertsons":        "Albertsons",
+  "vons":              "Vons",
+  "jewel-osco":        "Jewel-Osco",
+  "shaws":             "Shaw's",
+  "acme-markets":      "ACME Markets",
+  "tom-thumb":         "Tom Thumb",
+  "randalls":          "Randalls",
+  "pavilions":         "Pavilions",
+  "star-market":       "Star Market",
+  "costco":            "Costco",
+  "walmart":           "Walmart",
+  "target":            "Target",
+  "aldi":              "ALDI",
+  "whole-foods":       "Whole Foods Market",
+  "publix":            "Publix",
+  "wegmans":           "Wegmans",
+  "sprouts":           "Sprouts Farmers Market",
+  "heb":               "H-E-B",
+  "meijer":            "Meijer",
+  "stop-and-shop":     "Stop & Shop",
+  "food-lion":         "Food Lion",
+  "giant":             "Giant Food",
+  "bjs-wholesale":     "BJ's Wholesale Club",
+  "sams-club":         "Sam's Club",
+  "winn-dixie":        "Winn-Dixie",
+  "lucky-supermarkets":"Lucky Supermarkets",
+  "stater-brothers":   "Stater Bros.",
+  "smart-and-final":   "Smart & Final",
+  "price-chopper":     "Price Chopper",
+  "market-basket":     "Market Basket",
+};
+
+/**
+ * Returns a clean display name for a given Instacart slug.
+ * Tries exact match first, then prefix match (handles regional variants like
+ * "giant-food-dcp"), then falls back to title-casing the slug.
+ */
+function slugToDisplayName(slug: string): string {
+  // Exact match
+  if (SLUG_DISPLAY_NAMES[slug]) return SLUG_DISPLAY_NAMES[slug];
+  // Prefix match — "giant-food-dcp" → matches "giant"
+  for (const [key, display] of Object.entries(SLUG_DISPLAY_NAMES)) {
+    if (slug.startsWith(key)) return display;
+  }
+  // Title-case fallback: "harris-teeter" → "Harris Teeter"
+  return slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function nameToSlug(name: string): string | null {
   const key = name.toLowerCase().trim();
   for (const [pattern, slug] of Object.entries(SLUG_MAP)) {
@@ -272,9 +340,10 @@ export async function getStores(
           const lng = el.lon ?? el.center?.lon;
           if (!lat || !lng) continue;
           const city = el.tags?.["addr:city"];
+          const displayName = slugToDisplayName(slug);
           stores.push({
             id: `${slug}__${el.id}`,
-            name: city ? `${name} — ${city}` : name,
+            name: city ? `${displayName} — ${city}` : displayName,
             logoUrl: "",
             postalCode: zip,
             lat,
@@ -501,28 +570,20 @@ async function injectCookies(
   const trimmed = cookieString.trim();
   if (trimmed.startsWith("[")) {
     try {
-      type PlaywrightCookie = {
-        name: string; value: string; domain?: string; path?: string;
-        expires?: number; httpOnly?: boolean; secure?: boolean;
-        sameSite?: "Strict" | "Lax" | "None";
+      type StoredCookie = {
+        name: string; value: string; domain?: string; path?: string; secure?: boolean;
       };
-      const cookies = JSON.parse(trimmed) as PlaywrightCookie[];
+      const cookies = JSON.parse(trimmed) as StoredCookie[];
       for (const c of cookies) {
         if (!c.name || c.value === undefined) continue;
         try {
-          // Build the cookie object. Use `url` as a fallback when `domain` is
-          // missing so Playwright knows which origin the cookie belongs to.
-          const cookieObj: Parameters<typeof context.addCookies>[0][0] = {
+          await context.addCookies([{
             name: c.name,
             value: c.value,
             ...(c.domain ? { domain: c.domain } : { url: "https://www.instacart.com" }),
             path: c.path ?? "/",
-            ...(c.expires && c.expires > 0 ? { expires: c.expires } : {}),
-            httpOnly: c.httpOnly ?? false,
             secure: c.secure ?? false,
-            sameSite: c.sameSite ?? "Lax",
-          };
-          await context.addCookies([cookieObj]);
+          }]);
           injected++;
         } catch {
           // skip malformed or rejected cookies
@@ -607,43 +668,45 @@ async function scrapeInstacartStores(
     // Wait for the store cards to render
     await page.waitForTimeout(4_000);
 
-    // Log all /store/ hrefs found for debugging
-    const allStoreHrefs: string[] = await page.$$eval(
-      'a[href*="/store/"]',
-      (anchors) => anchors.map((a) => a.getAttribute("href") ?? "").filter(Boolean)
-    );
-    console.log(`[scraper] all /store/ hrefs found: ${allStoreHrefs.length}`);
-    if (allStoreHrefs.length > 0) {
-      console.log("[scraper] sample hrefs:", allStoreHrefs.slice(0, 10));
-    }
-
-    // Pull slug + display name directly from the rendered anchor tags
-    const rawStores: { slug: string; name: string }[] = await page.$$eval(
-      'a[href*="/store/"]',
-      (anchors) =>
-        anchors
-          .map((a) => {
-            const href = a.getAttribute("href") ?? "";
-            const match = href.match(/\/store\/([^/]+)\/storefront/);
-            if (!match) return null;
-            const slug = match[1];
-            // Prefer visible text; fall back to img alt or the slug itself
-            const name =
-              (a as HTMLElement).innerText?.trim() ||
-              a.querySelector("img")?.getAttribute("alt")?.trim() ||
-              slug;
-            return { slug, name };
-          })
-          .filter((s): s is { slug: string; name: string } => s !== null && s.name.length > 0)
-    );
-
     // Save post-render screenshot
     try {
       await page.screenshot({ path: "/tmp/instacart-debug-rendered.png", fullPage: false });
       console.log("[scraper] post-render screenshot saved → /tmp/instacart-debug-rendered.png");
     } catch { /* non-fatal */ }
 
-    // Deduplicate by slug
+    // Each store card has department tags (<li> with text like "Groceries",
+    // "Produce", "Organic") that are siblings of — not children of — the store
+    // anchor. So we walk UP from each "Groceries" <li> until we find a container
+    // that also contains a /store/[slug]/storefront anchor, then query down for it.
+    const rawStores: { slug: string; name: string }[] = await page.evaluate(() => {
+      const results: { slug: string; name: string }[] = [];
+      const groceryTags = Array.from(document.querySelectorAll("li")).filter(
+        (li) => li.textContent?.trim() === "Groceries"
+      );
+      for (const tag of groceryTags) {
+        let el: HTMLElement | null = tag.parentElement;
+        while (el && el !== document.body) {
+          const anchor = el.querySelector<HTMLAnchorElement>('a[href*="/store/"]');
+          if (anchor) {
+            const href = anchor.getAttribute("href") ?? "";
+            const match = href.match(/\/store\/([^/]+)\/storefront/);
+            if (match) {
+              const slug = match[1];
+              const name =
+                anchor.innerText?.split("\n")[0]?.trim() ||
+                anchor.querySelector("img")?.getAttribute("alt")?.trim() ||
+                slug;
+              results.push({ slug, name });
+            }
+            break;
+          }
+          el = el.parentElement;
+        }
+      }
+      return results;
+    });
+
+    // Deduplicate — a store card may have multiple "Groceries" li elements
     const seen = new Set<string>();
     const unique = rawStores.filter(({ slug }) => {
       if (seen.has(slug)) return false;
@@ -656,7 +719,12 @@ async function scrapeInstacartStores(
 
     return unique.map(({ slug, name }) => ({
       id: `${slug}__ic`,
-      name,
+      // Prefer the scraped display name when it looks human-readable (contains a
+      // space or is a known all-caps brand like "ALDI"). Fall back to the curated
+      // SLUG_DISPLAY_NAMES map so we never surface raw slugs in the UI.
+      name: (name && (name.includes(" ") || name === name.toUpperCase()) && !name.includes("-"))
+        ? name
+        : slugToDisplayName(slug),
       logoUrl: "",
       postalCode: zip,
     }));

@@ -61,17 +61,25 @@ export async function POST() {
     // Give the page a moment to set all post-login cookies
     await page.waitForTimeout(2_000);
 
-    const cookies = await context.cookies();
+    const allCookies = await context.cookies();
 
-    // Store the full Playwright cookie objects as JSON so we can re-inject
-    // with all original attributes (domain, path, secure, sameSite, expires).
-    // Losing these caused Instacart to reject the session on re-injection.
+    // Keep only instacart.com cookies and strip to the fields needed for
+    // re-injection (name, value, domain, path, secure). Dropping httpOnly,
+    // sameSite, and expires keeps the payload well under Clerk's 8KB metadata
+    // limit — a full Playwright cookie dump with all attributes exceeds it.
+    const cookies = allCookies
+      .filter((c) => c.domain.includes("instacart.com"))
+      .map((c) => ({
+        name: c.name,
+        value: c.value,
+        domain: c.domain,
+        path: c.path,
+        secure: c.secure,
+      }));
+
     const cookieJson = JSON.stringify(cookies);
 
-    console.log(`[instacart-connect] captured ${cookies.length} cookies for user ${userId}`);
-    if (cookies.length > 0) {
-      console.log(`[instacart-connect] sample cookies:`, cookies.slice(0, 3).map((c) => `${c.name} (domain=${c.domain}, secure=${c.secure})`));
-    }
+    console.log(`[instacart-connect] captured ${allCookies.length} total cookies, keeping ${cookies.length} instacart.com cookies (${cookieJson.length} bytes)`);
 
     await saveInstacartCookies(userId, cookieJson);
 

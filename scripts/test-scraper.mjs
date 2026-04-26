@@ -97,12 +97,80 @@ if (allStoreHrefs.length > 0) {
 const storefrontHrefs = allStoreHrefs.filter((h) => /\/store\/([^/]+)\/storefront/.test(h));
 console.log(`[test] /storefront hrefs: ${storefrontHrefs.length}`);
 if (storefrontHrefs.length > 0) {
-  console.log("[test] storefront hrefs:", storefrontHrefs);
+  console.log("[test] storefront hrefs:", storefrontHrefs.slice(0, 10));
 }
 
 // Get the page text to check if we're logged in
 const bodyText = await page.evaluate(() => document.body.innerText.slice(0, 500));
 console.log("[test] page body text (first 500 chars):", bodyText);
+
+// ── Dig into __NEXT_DATA__ ───────────────────────────────────────────────────
+// Instacart is a Next.js app. The server embeds all page props (including store
+// data with categories) in a <script id="__NEXT_DATA__"> tag. Extracting this
+// tells us exactly what fields Instacart uses to categorize stores.
+const nextData = await page.evaluate(() => {
+  const el = document.getElementById("__NEXT_DATA__");
+  if (!el) return null;
+  try { return JSON.parse(el.textContent ?? ""); } catch { return null; }
+});
+
+if (nextData) {
+  await writeFile("/tmp/instacart-next-data.json", JSON.stringify(nextData, null, 2));
+  console.log("[test] __NEXT_DATA__ saved → /tmp/instacart-next-data.json");
+
+  // Recursively find any object that has a "departments" or "department" or
+  // "categories" or "retailer_type" key — these are likely the category signals.
+  function findCategoryFields(obj, depth = 0, found = []) {
+    if (depth > 10 || !obj || typeof obj !== "object") return found;
+    const keys = Object.keys(obj);
+    const interesting = ["department", "departments", "categories", "category",
+                         "retailer_type", "store_type", "verticals", "tags",
+                         "fulfillment_types", "inventory_area_id"];
+    for (const k of interesting) {
+      if (keys.includes(k)) {
+        found.push({ path: k, value: obj[k], name: obj.name ?? obj.slug ?? "(unnamed)" });
+      }
+    }
+    if (Array.isArray(obj)) {
+      for (const item of obj.slice(0, 20)) findCategoryFields(item, depth + 1, found);
+    } else {
+      for (const v of Object.values(obj)) findCategoryFields(v, depth + 1, found);
+    }
+    return found;
+  }
+
+  const catFields = findCategoryFields(nextData);
+  if (catFields.length > 0) {
+    console.log("[test] category-related fields found in __NEXT_DATA__:");
+    // Deduplicate by key+value for readability
+    const seen = new Set();
+    for (const f of catFields) {
+      const key = `${f.path}:${JSON.stringify(f.value)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      console.log(`  [${f.name}] ${f.path}:`, f.value);
+      if (seen.size >= 30) { console.log("  … (truncated)"); break; }
+    }
+  } else {
+    console.log("[test] no category fields found in __NEXT_DATA__");
+  }
+} else {
+  console.log("[test] no __NEXT_DATA__ found (page may not be a Next.js SSR page, or redirected to login)");
+}
+
+// ── Check for data attributes on store cards ─────────────────────────────────
+const storeCardAttrs = await page.$$eval('a[href*="/store/"]', (anchors) =>
+  anchors.slice(0, 5).map((a) => ({
+    href: a.getAttribute("href"),
+    dataset: { ...a.dataset },
+    parentDataset: { ...(a.parentElement?.dataset ?? {}) },
+    classes: a.className,
+  }))
+);
+if (storeCardAttrs.length > 0) {
+  console.log("[test] sample store card attributes:");
+  for (const card of storeCardAttrs) console.log(" ", JSON.stringify(card));
+}
 
 await browser.close();
 console.log("[test] done");
