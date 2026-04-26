@@ -239,7 +239,7 @@ export async function getStores(
   // uses the saved delivery address on the account, so the store list matches
   // exactly what the user sees on the site. The direct v3/retailers API call
   // was removed — it ignores the saved address and returns a regional catalog.
-  const instacartStores = await scrapeInstacartStores(zip, center, radiusInMiles, instacartCookies ?? null);
+  const instacartStores = await scrapeInstacartStores(zip, instacartCookies ?? null);
   if (instacartStores) {
     console.log(`[scraper] getStores(${zip}) → ${instacartStores.length} stores from Instacart`);
     STORE_CACHE.set(zip, { stores: instacartStores, expiresAt: Date.now() + STORE_CACHE_TTL });
@@ -480,10 +480,86 @@ async function instacartFetch(
   });
 }
 
+/**
+ * Injects stored Instacart cookies into a Playwright browser context.
+ *
+ * Supports two storage formats:
+ *   1. JSON array (new format): full Playwright Cookie objects with domain,
+ *      path, secure, sameSite, etc. — injected with all original attributes.
+ *   2. "name=value; name2=value2" string (legacy format): attributes are
+ *      inferred. Cookies with __Host- / __Secure- prefixes get secure:true.
+ *
+ * Returns the number of successfully injected cookies.
+ */
+async function injectCookies(
+  context: import("playwright").BrowserContext,
+  cookieString: string
+): Promise<number> {
+  let injected = 0;
+
+  // ── Format 1: JSON array of full Playwright cookie objects ─────────────────
+  const trimmed = cookieString.trim();
+  if (trimmed.startsWith("[")) {
+    try {
+      type PlaywrightCookie = {
+        name: string; value: string; domain?: string; path?: string;
+        expires?: number; httpOnly?: boolean; secure?: boolean;
+        sameSite?: "Strict" | "Lax" | "None";
+      };
+      const cookies = JSON.parse(trimmed) as PlaywrightCookie[];
+      for (const c of cookies) {
+        if (!c.name || c.value === undefined) continue;
+        try {
+          // Build the cookie object. Use `url` as a fallback when `domain` is
+          // missing so Playwright knows which origin the cookie belongs to.
+          const cookieObj: Parameters<typeof context.addCookies>[0][0] = {
+            name: c.name,
+            value: c.value,
+            ...(c.domain ? { domain: c.domain } : { url: "https://www.instacart.com" }),
+            path: c.path ?? "/",
+            ...(c.expires && c.expires > 0 ? { expires: c.expires } : {}),
+            httpOnly: c.httpOnly ?? false,
+            secure: c.secure ?? false,
+            sameSite: c.sameSite ?? "Lax",
+          };
+          await context.addCookies([cookieObj]);
+          injected++;
+        } catch {
+          // skip malformed or rejected cookies
+        }
+      }
+      return injected;
+    } catch {
+      // Fall through to legacy format parsing
+    }
+  }
+
+  // ── Format 2: "name=value; name2=value2" legacy string ─────────────────────
+  for (const pair of cookieString.split(";")) {
+    const eqIdx = pair.indexOf("=");
+    if (eqIdx === -1) continue;
+    const name = pair.slice(0, eqIdx).trim();
+    const value = pair.slice(eqIdx + 1).trim();
+    if (!name) continue;
+    try {
+      await context.addCookies([{
+        name,
+        value,
+        url: "https://www.instacart.com",
+        ...(name.startsWith("__Host-") || name.startsWith("__Secure-")
+          ? { secure: true }
+          : {}),
+      }]);
+      injected++;
+    } catch {
+      // skip cookies that fail validation
+    }
+  }
+  return injected;
+}
+
 async function scrapeInstacartStores(
   zip: string,
-  center: ZipCoords | null,
-  radiusInMiles: number,
   instacartCookies: string | null
 ): Promise<Retailer[] | null> {
   const browser = await chromium.launch({
@@ -502,92 +578,94 @@ async function scrapeInstacartStores(
   await context.addInitScript(STEALTH_SCRIPT);
 
   // Inject session cookies before creating the page so they're present on
-  // the very first navigation request. We use `url` (not `domain`/`path`)
-  // to avoid Playwright's strict __Host- / __Secure- prefix validation.
+  // the very first navigation request.
   if (instacartCookies) {
-    let injected = 0;
-    for (const pair of instacartCookies.split(";")) {
-      const eqIdx = pair.indexOf("=");
-      if (eqIdx === -1) continue;
-      const name = pair.slice(0, eqIdx).trim();
-      const value = pair.slice(eqIdx + 1).trim();
-      if (!name) continue;
-      try {
-        await context.addCookies([{
-          name,
-          value,
-          url: "https://www.instacart.com",
-          ...(name.startsWith("__Host-") || name.startsWith("__Secure-")
-            ? { secure: true }
-            : {}),
-        }]);
-        injected++;
-      } catch {
-        // skip cookies that fail validation (e.g. malformed values)
-      }
-    }
+    const injected = await injectCookies(context, instacartCookies);
     console.log(`[scraper] injected ${injected} cookies into browser context`);
   }
 
   const page = await context.newPage();
-  const retailers: Retailer[] = [];
-
-  const retailersFound = new Promise<void>((resolve) => {
-    page.on("response", async (response) => {
-      if (retailers.length > 0) return;
-      const url = response.url();
-      if (!url.includes("instacart.com")) return;
-      if (!response.ok()) return;
-      const contentType = response.headers()["content-type"] ?? "";
-      if (!contentType.includes("json")) return;
-
-      try {
-        const text = await response.text();
-        if (!text.startsWith("{") && !text.startsWith("[")) return;
-        const json = JSON.parse(text) as Record<string, unknown>;
-        const raw = findRetailersInJson(json);
-        const endpoint = url.split("?")[0].replace("https://www.instacart.com", "");
-        if (raw.length === 0) {
-          // Log a snippet of every graphql response so we can see the actual shape
-          if (url.includes("/graphql") || url.includes("/v3/")) {
-            console.log(`[scraper] ${endpoint} — 0 candidates. Sample: ${text.slice(0, 600)}`);
-          }
-          return;
-        }
-        console.log(`[scraper] ${endpoint} — found ${raw.length} retailers:`, raw.map((r) => r.name));
-        const built = await buildStoresFromRaw(raw, zip, center, radiusInMiles);
-        retailers.push(...built);
-        if (retailers.length > 0) resolve();
-      } catch {
-        // non-JSON or unexpected shape — skip
-      }
-    });
-  });
-
   try {
-    // Navigate to the homepage — authenticated session loads the user's address
-    // automatically and fires the retailers API call we intercept above.
-    console.log(`[scraper] navigating to instacart.com (authenticated: ${!!instacartCookies})…`);
-    await page.goto("https://www.instacart.com", {
+    // The grocery directory gives us pre-filtered results — no whitelist needed
+    console.log(`[scraper] navigating to instacart.com/store/directory?filter=grocery…`);
+    await page.goto("https://www.instacart.com/store/directory?filter=grocery", {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
     console.log(`[scraper] landed on: ${page.url()}`);
 
-    // Screenshot immediately after load so we can see what the browser sees
-    await page.waitForTimeout(3_000);
-    await page.screenshot({ path: "/tmp/instacart-auth-debug.png", fullPage: false });
-    console.log(`[scraper] screenshot saved → /tmp/instacart-auth-debug.png`);
+    // Log where we actually landed (in case of redirects)
+    console.log(`[scraper] page title: "${await page.title()}"`);
+    console.log(`[scraper] final URL: ${page.url()}`);
 
-    // Give the page JS time to fire the store-list API call
-    await Promise.race([retailersFound, page.waitForTimeout(12_000)]);
+    // Save debug screenshot so we can inspect what the browser sees
+    try {
+      await page.screenshot({ path: "/tmp/instacart-debug.png", fullPage: false });
+      console.log("[scraper] screenshot saved → /tmp/instacart-debug.png");
+    } catch { /* non-fatal */ }
+
+    // Wait for the store cards to render
+    await page.waitForTimeout(4_000);
+
+    // Log all /store/ hrefs found for debugging
+    const allStoreHrefs: string[] = await page.$$eval(
+      'a[href*="/store/"]',
+      (anchors) => anchors.map((a) => a.getAttribute("href") ?? "").filter(Boolean)
+    );
+    console.log(`[scraper] all /store/ hrefs found: ${allStoreHrefs.length}`);
+    if (allStoreHrefs.length > 0) {
+      console.log("[scraper] sample hrefs:", allStoreHrefs.slice(0, 10));
+    }
+
+    // Pull slug + display name directly from the rendered anchor tags
+    const rawStores: { slug: string; name: string }[] = await page.$$eval(
+      'a[href*="/store/"]',
+      (anchors) =>
+        anchors
+          .map((a) => {
+            const href = a.getAttribute("href") ?? "";
+            const match = href.match(/\/store\/([^/]+)\/storefront/);
+            if (!match) return null;
+            const slug = match[1];
+            // Prefer visible text; fall back to img alt or the slug itself
+            const name =
+              (a as HTMLElement).innerText?.trim() ||
+              a.querySelector("img")?.getAttribute("alt")?.trim() ||
+              slug;
+            return { slug, name };
+          })
+          .filter((s): s is { slug: string; name: string } => s !== null && s.name.length > 0)
+    );
+
+    // Save post-render screenshot
+    try {
+      await page.screenshot({ path: "/tmp/instacart-debug-rendered.png", fullPage: false });
+      console.log("[scraper] post-render screenshot saved → /tmp/instacart-debug-rendered.png");
+    } catch { /* non-fatal */ }
+
+    // Deduplicate by slug
+    const seen = new Set<string>();
+    const unique = rawStores.filter(({ slug }) => {
+      if (seen.has(slug)) return false;
+      seen.add(slug);
+      return true;
+    });
+
+    console.log(`[scraper] grocery directory stores:`, unique.map((s) => s.name));
+    if (unique.length === 0) return null;
+
+    return unique.map(({ slug, name }) => ({
+      id: `${slug}__ic`,
+      name,
+      logoUrl: "",
+      postalCode: zip,
+    }));
   } catch (err) {
     console.warn("[scraper] scrapeInstacartStores error:", err);
+    return null;
   } finally {
     await browser.close();
   }
-
-  return retailers.length > 0 ? retailers : null;
 }
 
 function addOffset(coord: number, i: number): number {
