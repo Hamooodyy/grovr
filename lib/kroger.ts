@@ -162,6 +162,7 @@ export async function searchProducts(
 // ---------------------------------------------------------------------------
 
 const PRODUCT_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const PRODUCT_CACHE_MAX_SIZE = 500; // evict when we exceed this many entries
 
 interface ProductCacheEntry {
   value: ProductMatch;
@@ -169,6 +170,23 @@ interface ProductCacheEntry {
 }
 
 const productCache = new Map<string, ProductCacheEntry>();
+
+/** Removes expired entries; if still over the size limit, drops oldest entries. */
+function evictProductCache() {
+  const now = Date.now();
+  for (const [key, entry] of productCache) {
+    if (now >= entry.expiresAt) productCache.delete(key);
+  }
+  // If still too large, drop from the front (oldest insertions)
+  if (productCache.size > PRODUCT_CACHE_MAX_SIZE) {
+    const excess = productCache.size - PRODUCT_CACHE_MAX_SIZE;
+    let removed = 0;
+    for (const key of productCache.keys()) {
+      productCache.delete(key);
+      if (++removed >= excess) break;
+    }
+  }
+}
 
 /**
  * Returns the best product match and price for an item at a given store.
@@ -187,6 +205,7 @@ export async function searchProduct(
   }
 
   const result = await fetchProduct(item, locationId);
+  if (productCache.size >= PRODUCT_CACHE_MAX_SIZE) evictProductCache();
   productCache.set(key, {
     value: result,
     expiresAt: Date.now() + PRODUCT_CACHE_TTL_MS,
@@ -288,12 +307,12 @@ export interface KrogerUserTokens {
 }
 
 /**
- * Exchanges an authorization code for user tokens.
- * Returns the access token, refresh token, and expiry timestamp.
+ * Shared helper — posts to the Kroger OAuth token endpoint with Basic auth.
+ * Pass any grant-type-specific params; returns parsed token fields.
  */
-export async function exchangeCodeForUserToken(
-  code: string
-): Promise<KrogerUserTokens> {
+async function fetchUserToken(
+  params: Record<string, string>
+): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
   const credentials = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
 
   const res = await fetch(`${BASE_URL}/connect/oauth2/token`, {
@@ -302,20 +321,30 @@ export async function exchangeCodeForUserToken(
       Authorization: `Basic ${credentials}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: REDIRECT_URI,
-    }).toString(),
+    body: new URLSearchParams(params).toString(),
   });
 
-  if (!res.ok) throw new Error(`Token exchange failed: ${res.status}`);
+  if (!res.ok) throw new Error(`Kroger token request failed: ${res.status}`);
 
-  const data = (await res.json()) as {
+  return res.json() as Promise<{
     access_token: string;
     refresh_token: string;
     expires_in: number;
-  };
+  }>;
+}
+
+/**
+ * Exchanges an authorization code for user tokens.
+ * Returns the access token, refresh token, and expiry timestamp.
+ */
+export async function exchangeCodeForUserToken(
+  code: string
+): Promise<KrogerUserTokens> {
+  const data = await fetchUserToken({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: REDIRECT_URI,
+  });
 
   return {
     accessToken: data.access_token,
@@ -331,27 +360,10 @@ export async function exchangeCodeForUserToken(
 export async function refreshAccessToken(
   refreshToken: string
 ): Promise<KrogerUserTokens> {
-  const credentials = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
-
-  const res = await fetch(`${BASE_URL}/connect/oauth2/token`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-    }).toString(),
+  const data = await fetchUserToken({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
   });
-
-  if (!res.ok) throw new Error(`Token refresh failed: ${res.status}`);
-
-  const data = (await res.json()) as {
-    access_token: string;
-    refresh_token: string;
-    expires_in: number;
-  };
 
   return {
     accessToken: data.access_token,

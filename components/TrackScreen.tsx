@@ -172,7 +172,7 @@ export default function TrackScreen({ items, winnerStore, onNavigate, isDesktop 
   // ── Desktop ──────────────────────────────────────────────────────────────────
   if (isDesktop) {
     return (
-      <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
+      <div style={{ display: "flex", flex: 1, minHeight: 0, width: "100%", overflow: "hidden" }}>
         {/* Left: status */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* ETA hero */}
@@ -340,7 +340,7 @@ export default function TrackScreen({ items, winnerStore, onNavigate, isDesktop 
 
   // ── Mobile ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, width: "100%" }}>
       {/* ETA hero */}
       <div
         style={{

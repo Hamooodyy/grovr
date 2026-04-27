@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { searchProduct } from "@/lib/kroger";
+import { auth } from "@clerk/nextjs/server";
+import { searchProduct } from "@/lib/provider";
 import { compareRetailerPrices } from "@/lib/pricing";
 import type { GroceryItem, Retailer } from "@/lib/types";
 
@@ -26,12 +27,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "stores must be a non-empty array" }, { status: 400 });
   }
 
+  // Sanitize names; keep brandPref separate — the scraper handles progressive
+  // fallback internally (branded term → base name → shorter keywords).
+  const sanitizedItems = items.map((item) => ({
+    ...item,
+    name: item.name.trim().slice(0, 80),
+    brandPref: item.brandPref?.trim().slice(0, 40) || undefined,
+  }));
+
   try {
+    const { userId } = await auth();
+
     // Fan out: search every item at every store in parallel
     const retailerMatches = await Promise.all(
       stores.map(async (store) => {
         const matches = await Promise.all(
-          items.map((item) => searchProduct(item, store.id))
+          sanitizedItems.map((item) => searchProduct(item, store.id, userId ?? undefined))
         );
         return { retailer: store, items: matches };
       })

@@ -1,40 +1,25 @@
 "use client";
 
-import { useState, useRef } from "react";
-import type { GroceryItem, ProductSuggestion } from "@/lib/types";
+import { useState } from "react";
+import type { GroceryItem } from "@/lib/types";
 
-interface SearchBarUIProps {
+interface AddItemBarProps {
   query: string;
-  onInput: (value: string) => void;
-  suggestions: ProductSuggestion[];
-  loading: boolean;
-  open: boolean;
-  setOpen: (open: boolean) => void;
-  onSelect: (s: ProductSuggestion) => void;
+  setQuery: (v: string) => void;
+  onAdd: () => void;
 }
 
-function SearchBarUI({ query, onInput, suggestions, loading, open, setOpen, onSelect }: SearchBarUIProps) {
+function AddItemBar({ query, setQuery, onAdd }: AddItemBarProps) {
   return (
-    <div style={{ position: "relative" }}>
-      <svg
-        style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)" }}
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-      >
-        <circle cx="11" cy="11" r="7" stroke="var(--muted)" strokeWidth="2" />
-        <path d="m16.5 16.5 4 4" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" />
-      </svg>
+    <div style={{ display: "flex", gap: 8 }}>
       <input
         value={query}
-        onChange={(e) => onInput(e.target.value)}
-        onFocus={() => suggestions.length > 0 && setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Search and add items…"
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter" && query.trim()) onAdd(); }}
+        placeholder="Add an item (e.g. lactaid milk, eggs…)"
         style={{
-          width: "100%",
-          padding: "12px 12px 12px 40px",
+          flex: 1,
+          padding: "12px 14px",
           border: "1.5px solid var(--border)",
           borderRadius: 12,
           fontFamily: "inherit",
@@ -44,79 +29,25 @@ function SearchBarUI({ query, onInput, suggestions, loading, open, setOpen, onSe
           boxSizing: "border-box",
         }}
       />
-      {loading && (
-        <span
-          style={{
-            position: "absolute",
-            right: 12,
-            top: "50%",
-            transform: "translateY(-50%)",
-            fontSize: 12,
-            color: "var(--muted)",
-          }}
-        >
-          …
-        </span>
-      )}
-      {open && suggestions.length > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            right: 0,
-            background: "white",
-            border: "1px solid var(--border)",
-            borderRadius: 12,
-            marginTop: 4,
-            overflow: "hidden",
-            boxShadow: "var(--shadow-lg)",
-            zIndex: 50,
-          }}
-        >
-          {suggestions.slice(0, 5).map((s) => (
-            <div
-              key={s.productId}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => onSelect(s)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "10px 14px",
-                cursor: "pointer",
-                borderBottom: "1px solid var(--border)",
-              }}
-            >
-              <ProductThumb imageUrl={s.imageUrl} name={s.name} size={36} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontWeight: 600,
-                    fontSize: 13,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {s.name}
-                </div>
-                <div style={{ color: "var(--muted)", fontSize: 11 }}>
-                  {[s.brand, s.size].filter(Boolean).join(" · ")}
-                </div>
-              </div>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M12 5v14M5 12h14"
-                  stroke="var(--green)"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </div>
-          ))}
-        </div>
-      )}
+      <button
+        onClick={onAdd}
+        disabled={!query.trim()}
+        style={{
+          padding: "12px 18px",
+          borderRadius: 12,
+          border: "none",
+          background: query.trim() ? "var(--green)" : "var(--border)",
+          color: query.trim() ? "white" : "var(--muted)",
+          fontFamily: "inherit",
+          fontWeight: 700,
+          fontSize: 14,
+          cursor: query.trim() ? "pointer" : "default",
+          flexShrink: 0,
+          transition: "background 0.15s",
+        }}
+      >
+        Add
+      </button>
     </div>
   );
 }
@@ -188,7 +119,7 @@ function EmptyState() {
         <path d="M16 10a4 4 0 01-8 0" stroke="#888" strokeWidth="1.5" />
       </svg>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>Your list is empty</div>
-      <div style={{ fontSize: 13 }}>Search for items above to get started</div>
+      <div style={{ fontSize: 13 }}>Type an item above and press Enter to add it</div>
     </div>
   );
 }
@@ -436,14 +367,14 @@ interface Props {
   addItem: (item: Omit<GroceryItem, "id">) => void;
   removeItem: (id: string) => void;
   updateQty: (id: string, delta: number) => void;
+  brandPrefs: Record<string, string>;
+  setBrandPref: (id: string, val: string) => void;
   pricingLoading: boolean;
   pricingError: string | null;
   setPricingError: (e: string | null) => void;
   findPrices: () => void;
   onNavigate: (screen: "map" | "list" | "compare" | "checkout" | "track") => void;
-  locationId?: string;
   isDesktop: boolean;
-  zip?: string;
 }
 
 export default function ShoppingList({
@@ -451,81 +382,39 @@ export default function ShoppingList({
   addItem,
   removeItem,
   updateQty,
+  brandPrefs,
+  setBrandPref,
   pricingLoading,
   pricingError,
   setPricingError,
   findPrices,
   onNavigate,
-  locationId,
   isDesktop,
 }: Props) {
   const [query, setQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<ProductSuggestion[]>([]);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const [open, setOpen] = useState(false);
   const [expandedPref, setExpandedPref] = useState<string | null>(null);
-  const [brandPrefs, setBrandPrefsState] = useState<Record<string, string>>({});
-
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const totalQty = items.reduce((s, i) => s + i.quantity, 0);
 
   // Category grouping for desktop summary panel
   const catCounts = items.reduce<Record<string, number>>((acc, item) => {
-    const cat = "produce"; // default; Kroger API items don't carry cat metadata
+    const cat = "produce";
     acc[cat] = (acc[cat] || 0) + item.quantity;
     return acc;
   }, {});
 
-  function handleInput(value: string) {
-    setQuery(value);
-    setPricingError(null);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    if (value.trim().length < 2) {
-      setSuggestions([]);
-      setOpen(false);
-      return;
-    }
-
-    debounceRef.current = setTimeout(async () => {
-      setSuggestionsLoading(true);
-      try {
-        const qs = new URLSearchParams({ q: value.trim() });
-        if (locationId) qs.set("locationId", locationId);
-        const res = await fetch(`/api/search?${qs}`);
-        const data = (await res.json()) as { products: ProductSuggestion[] };
-        setSuggestions(data.products);
-        setOpen(data.products.length > 0);
-      } catch {
-        setSuggestions([]);
-      } finally {
-        setSuggestionsLoading(false);
-      }
-    }, 300);
-  }
-
-  function selectSuggestion(s: ProductSuggestion) {
-    addItem({
-      name: s.name,
-      quantity: 1,
-      unit: s.size ?? "each",
-      upc: s.upc,
-      imageUrl: s.imageUrl,
-    });
+  function handleAdd() {
+    const name = query.trim();
+    if (!name) return;
+    addItem({ name, quantity: 1, unit: "each" });
     setQuery("");
-    setSuggestions([]);
-    setOpen(false);
-  }
-
-  function setBrandPref(id: string, val: string) {
-    setBrandPrefsState((prev) => ({ ...prev, [id]: val }));
+    setPricingError(null);
   }
 
   // ── Desktop layout ──────────────────────────────────────────────────────────
   if (isDesktop) {
     return (
-      <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
+      <div style={{ display: "flex", flex: 1, minHeight: 0, width: "100%", overflow: "hidden" }}>
         {/* Left: list */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div
@@ -537,15 +426,7 @@ export default function ShoppingList({
               position: "relative",
             }}
           >
-            <SearchBarUI
-                query={query}
-                onInput={handleInput}
-                suggestions={suggestions}
-                loading={suggestionsLoading}
-                open={open}
-                setOpen={setOpen}
-                onSelect={selectSuggestion}
-              />
+            <AddItemBar query={query} setQuery={setQuery} onAdd={handleAdd} />
             <div style={{ height: 16 }} />
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
@@ -721,7 +602,7 @@ export default function ShoppingList({
 
   // ── Mobile layout ───────────────────────────────────────────────────────────
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, width: "100%" }}>
       <div
         style={{
           padding: "16px 16px 0",
@@ -731,15 +612,7 @@ export default function ShoppingList({
           position: "relative",
         }}
       >
-        <SearchBarUI
-          query={query}
-          onInput={handleInput}
-          suggestions={suggestions}
-          loading={suggestionsLoading}
-          open={open}
-          setOpen={setOpen}
-          onSelect={selectSuggestion}
-        />
+        <AddItemBar query={query} setQuery={setQuery} onAdd={handleAdd} />
         <div style={{ height: 12 }} />
       </div>
 

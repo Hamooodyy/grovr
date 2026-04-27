@@ -10,7 +10,6 @@ interface Props {
   comparisons: PriceComparison[];
   onNavigate: (screen: "map" | "list" | "compare" | "checkout" | "track") => void;
   handleAddToCart: (comparison: PriceComparison) => void;
-  cartLoading: boolean;
   pricingError: string | null;
   isDesktop: boolean;
 }
@@ -42,7 +41,6 @@ export default function CheckoutScreen({
   comparisons,
   onNavigate,
   handleAddToCart,
-  cartLoading,
   pricingError,
   isDesktop,
 }: Props) {
@@ -168,6 +166,12 @@ export default function CheckoutScreen({
     </div>
   );
 
+  const instacartSlug = store?.id.split("__")[0].toLowerCase() ?? "";
+  const instacartUrl =
+    instacartSlug === "walmart"
+      ? "https://www.walmart.com"
+      : `https://www.instacart.com/store/${instacartSlug}/storefront`;
+
   const handoffNote = (
     <div
       style={{
@@ -195,9 +199,9 @@ export default function CheckoutScreen({
         <path d="M12 7v5l3 3" stroke="var(--green)" strokeWidth="2" strokeLinecap="round" />
       </svg>
       <span>
-        Clicking <strong style={{ color: "var(--text)" }}>Checkout at Kroger</strong> will add
-        your items to your Kroger cart. You&apos;ll complete the order — including delivery or
-        pickup options — directly on kroger.com.
+        You&apos;ll be taken to <strong style={{ color: "var(--text)" }}>{store?.name}</strong>{" "}
+        on {instacartSlug === "walmart" ? "Walmart.com" : "Instacart"}. Use the prices above as a
+        guide while you add items to your cart there.
       </span>
     </div>
   );
@@ -205,9 +209,11 @@ export default function CheckoutScreen({
   const errorBanner = pricingError ? <ErrorBanner message={pricingError} /> : null;
 
   const checkoutBtn = (
-    <button
+    <a
+      href={instacartUrl}
+      target="_blank"
+      rel="noopener noreferrer"
       onClick={() => handleAddToCart(winnerComparison)}
-      disabled={cartLoading}
       style={{
         width: "100%",
         display: "flex",
@@ -219,30 +225,16 @@ export default function CheckoutScreen({
         fontFamily: "inherit",
         fontSize: 15,
         fontWeight: 600,
-        cursor: cartLoading ? "not-allowed" : "pointer",
+        cursor: "pointer",
         border: "none",
         background: "var(--green)",
         color: "white",
-        opacity: cartLoading ? 0.65 : 1,
+        textDecoration: "none",
+        boxSizing: "border-box",
       }}
     >
-      {cartLoading ? (
-        "Loading…"
-      ) : (
-        <>
-          Checkout at Kroger
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M7 17L17 7M17 7H7M17 7v10"
-              stroke="white"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </>
-      )}
-    </button>
+      Shop on {instacartSlug === "walmart" ? "Walmart" : "Instacart"} →
+    </a>
   );
 
   const summaryContent = (
@@ -268,7 +260,7 @@ export default function CheckoutScreen({
   // ── Desktop ──────────────────────────────────────────────────────────────────
   if (isDesktop) {
     return (
-      <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
+      <div style={{ display: "flex", flex: 1, minHeight: 0, width: "100%", overflow: "hidden" }}>
         {/* Left: context */}
         <div
           style={{
@@ -322,7 +314,8 @@ export default function CheckoutScreen({
               lineHeight: 1.6,
             }}
           >
-            We&apos;ll pre-load your shopping cart with Kroger for an easy checkout!
+            We found the best prices for your list. Head to{" "}
+            {instacartSlug === "walmart" ? "Walmart" : "Instacart"} to complete your order.
           </div>
         </div>
 
@@ -352,7 +345,7 @@ export default function CheckoutScreen({
 
   // ── Mobile ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, width: "100%" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
         {errorBanner}
         {summaryContent}
