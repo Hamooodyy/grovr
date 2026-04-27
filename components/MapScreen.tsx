@@ -110,7 +110,7 @@ export default function MapScreen({
     );
   }
 
-  const LocationBtn = () => (
+  const locationBtn = (
     <button
       onClick={detectLocation}
       disabled={locating}
@@ -252,7 +252,7 @@ export default function MapScreen({
                       maxLength={10}
                       style={{ width: "100%", padding: "10px 34px 10px 34px", border: "1.5px solid var(--border)", borderRadius: 10, fontFamily: "inherit", fontSize: 13, color: "#0e1f14", outline: "none", boxSizing: "border-box" }}
                     />
-                    <LocationBtn />
+                    {locationBtn}
                   </div>
                 </>
               )}
@@ -412,7 +412,7 @@ export default function MapScreen({
                 maxLength={10}
                 style={{ width: "100%", padding: "10px 34px 10px 34px", border: "1.5px solid var(--border)", borderRadius: 10, fontFamily: "inherit", fontSize: 14, color: "#0e1f14", outline: "none", boxSizing: "border-box" }}
               />
-              <LocationBtn />
+              {locationBtn}
             </div>
           )}
         </div>

@@ -10,8 +10,6 @@ interface Props {
   items: GroceryItem[];
   onNavigate: (screen: "map" | "list" | "compare" | "checkout" | "track") => void;
   setWinnerStore: (store: Retailer) => void;
-  handleAddToCart: (comparison: PriceComparison) => void;
-  cartLoading: boolean;
   pricingError: string | null;
   isDesktop: boolean;
 }
@@ -451,8 +449,6 @@ export default function RetailerComparison({
   items,
   onNavigate,
   setWinnerStore,
-  handleAddToCart,
-  cartLoading,
   pricingError,
   isDesktop,
 }: Props) {
@@ -680,9 +676,6 @@ export default function RetailerComparison({
           background: "white",
           borderTop: "1px solid var(--border)",
           flexShrink: 0,
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
         }}
       >
         <button
@@ -704,28 +697,6 @@ export default function RetailerComparison({
           }}
         >
           Order from {selected.retailer.name} — {fmt(selected.subtotal)}
-        </button>
-        <button
-          onClick={() => handleAddToCart(selected)}
-          disabled={cartLoading}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "12px 24px",
-            borderRadius: 14,
-            fontFamily: "inherit",
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: cartLoading ? "not-allowed" : "pointer",
-            border: "none",
-            background: "var(--green-light)",
-            color: "var(--green)",
-            opacity: cartLoading ? 0.65 : 1,
-          }}
-        >
-          {cartLoading ? "Adding to cart…" : "Add to Kroger Cart"}
         </button>
       </div>
     </div>

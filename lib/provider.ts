@@ -1,14 +1,11 @@
 /**
- * lib/provider.ts — Data source toggle
+ * lib/provider.ts — Data source router
  *
- * Set USE_SCRAPER=true in .env.local to route all store/pricing calls
- * through the Instacart scraper instead of the Kroger API.
- * Flip it back to false (or remove it) to restore the original behavior.
+ * All store discovery and product pricing go through the Instacart scraper.
+ * The Kroger API path is kept for reference but is no longer the active flow.
  *
- * API routes import from here instead of directly from kroger.ts or scraper.ts.
+ * API routes import from here — never directly from kroger.ts or scraper.ts.
  */
-
-const USE_SCRAPER = process.env.USE_SCRAPER === "true";
 
 // ---------------------------------------------------------------------------
 // Stores
@@ -19,17 +16,13 @@ export async function getNearbyStores(
   radiusInMiles?: number,
   userId?: string
 ): ReturnType<typeof import("./kroger").getNearbyStores> {
-  if (USE_SCRAPER) {
-    const { getStores } = await import("./scraper");
-    let cookies: string | null = null;
-    if (userId) {
-      const { getInstacartCookies } = await import("./instacart-session");
-      cookies = await getInstacartCookies(userId);
-    }
-    return getStores(zipCode, radiusInMiles, cookies);
+  const { getStores } = await import("./scraper");
+  let cookies: string | null = null;
+  if (userId) {
+    const { getInstacartCookies } = await import("./instacart-session");
+    cookies = await getInstacartCookies(userId);
   }
-  const { getNearbyStores: krogerGetNearbyStores } = await import("./kroger");
-  return krogerGetNearbyStores(zipCode, radiusInMiles);
+  return getStores(zipCode, radiusInMiles, cookies);
 }
 
 // ---------------------------------------------------------------------------
@@ -37,37 +30,25 @@ export async function getNearbyStores(
 // ---------------------------------------------------------------------------
 
 export async function searchProduct(
-  ...args: Parameters<typeof import("./kroger").searchProduct>
-): ReturnType<typeof import("./kroger").searchProduct>;
-export async function searchProduct(
-  item: import("./types").GroceryItem,
-  locationId: string,
-  userId?: string
-): ReturnType<typeof import("./kroger").searchProduct>;
-export async function searchProduct(
   item: import("./types").GroceryItem,
   locationId: string,
   userId?: string
 ): ReturnType<typeof import("./kroger").searchProduct> {
-  if (USE_SCRAPER) {
-    const { scrapeProduct } = await import("./scraper");
-    let cookies: string | null = null;
-    if (userId) {
-      const { getInstacartCookies } = await import("./instacart-session");
-      cookies = await getInstacartCookies(userId);
-    }
-    return scrapeProduct(
-      item,
-      { id: locationId, name: locationId, logoUrl: "", postalCode: "" },
-      cookies
-    );
+  const { scrapeProduct } = await import("./scraper");
+  let cookies: string | null = null;
+  if (userId) {
+    const { getInstacartCookies } = await import("./instacart-session");
+    cookies = await getInstacartCookies(userId);
   }
-  const { searchProduct: krogerSearchProduct } = await import("./kroger");
-  return krogerSearchProduct(item, locationId);
+  return scrapeProduct(
+    item,
+    { id: locationId, name: locationId, logoUrl: "", postalCode: "" },
+    cookies
+  );
 }
 
 // ---------------------------------------------------------------------------
-// Cart
+// Cart URL
 // ---------------------------------------------------------------------------
 
 export async function buildCartUrl(
@@ -77,7 +58,7 @@ export async function buildCartUrl(
   return scraperBuildCartUrl(...args);
 }
 
-// Re-export everything else from kroger that the app uses directly
+// Re-export Kroger utilities that other parts of the app still reference
 export {
   searchProducts,
   getKrogerAuthUrl,

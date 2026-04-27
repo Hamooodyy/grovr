@@ -3,8 +3,9 @@ export interface GroceryItem {
   name: string;
   quantity: number;
   unit: string;
-  upc?: string;      // pre-resolved from autocomplete; used for exact pricing
-  imageUrl?: string; // thumbnail from Kroger product catalog
+  upc?: string;       // pre-resolved from autocomplete
+  imageUrl?: string;  // product thumbnail
+  brandPref?: string; // user-supplied brand preference (appended to scraper search query)
 }
 
 export interface ProductSuggestion {

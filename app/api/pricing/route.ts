@@ -27,10 +27,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "stores must be a non-empty array" }, { status: 400 });
   }
 
-  // Cap item names to prevent overly long strings being passed into scraper queries
+  // Sanitize names; keep brandPref separate — the scraper handles progressive
+  // fallback internally (branded term → base name → shorter keywords).
   const sanitizedItems = items.map((item) => ({
     ...item,
-    name: item.name.trim().slice(0, 100),
+    name: item.name.trim().slice(0, 80),
+    brandPref: item.brandPref?.trim().slice(0, 40) || undefined,
   }));
 
   try {

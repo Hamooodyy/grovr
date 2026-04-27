@@ -57,76 +57,6 @@ async function geocodeZip(zip: string): Promise<ZipCoords | null> {
   }
 }
 
-// Long-lived cache — store coordinates don't change
-const storeGeocodeCache = new Map<string, ZipCoords | null>();
-
-async function geocodeStore(
-  name: string,
-  zip: string,
-  center: ZipCoords | null
-): Promise<ZipCoords | null> {
-  const key = `${name}__${zip}`;
-  if (storeGeocodeCache.has(key)) return storeGeocodeCache.get(key)!;
-  try {
-    // Strategy 1: viewbox-constrained search (most reliable when we have the ZIP center)
-    if (center) {
-      const delta = 0.15; // ~10 mile bounding box
-      const viewbox = `${center.lng - delta},${center.lat + delta},${center.lng + delta},${center.lat - delta}`;
-      const url =
-        `https://nominatim.openstreetmap.org/search` +
-        `?q=${encodeURIComponent(name)}&format=json&limit=1&bounded=1&viewbox=${viewbox}`;
-      const res = await fetch(url, {
-        headers: { "User-Agent": "Grovr/1.0 (grocery price comparison app)" },
-      });
-      if (res.ok) {
-        const data = (await res.json()) as Array<{ lat: string; lon: string }>;
-        if (data.length) {
-          const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-          storeGeocodeCache.set(key, coords);
-          return coords;
-        }
-      }
-    }
-
-    // Strategy 2: free-text fallback "Store Name ZIP US"
-    const q = encodeURIComponent(`${name} ${zip} US`);
-    const res2 = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`,
-      { headers: { "User-Agent": "Grovr/1.0 (grocery price comparison app)" } }
-    );
-    if (res2.ok) {
-      const data2 = (await res2.json()) as Array<{ lat: string; lon: string }>;
-      const coords = data2.length
-        ? { lat: parseFloat(data2[0].lat), lng: parseFloat(data2[0].lon) }
-        : null;
-      storeGeocodeCache.set(key, coords);
-      return coords;
-    }
-
-    storeGeocodeCache.set(key, null);
-    return null;
-  } catch {
-    storeGeocodeCache.set(key, null);
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Distance filtering
-// ---------------------------------------------------------------------------
-
-/** Returns distance in miles between two lat/lng points (Haversine formula). */
-function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 3958.8;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 // ---------------------------------------------------------------------------
 // Store discovery — OpenStreetMap Overpass API
 // ---------------------------------------------------------------------------
@@ -369,185 +299,6 @@ export async function getStores(
   return [];
 }
 
-async function buildStoresFromRaw(
-  raw: Record<string, unknown>[],
-  zip: string,
-  center: ZipCoords | null,
-  radiusInMiles: number
-): Promise<Retailer[]> {
-  // First pass: build store shells (sync, fast)
-  type StoreShell = {
-    slug: string;
-    name: string;
-    logoUrl: string;
-    apiLat?: number;
-    apiLng?: number;
-    index: number;
-  };
-  const shells: StoreShell[] = [];
-  for (const retailer of raw) {
-    const name = String(retailer.name ?? "");
-    if (!name) continue;
-
-    // Whitelist: only include stores whose name matches a known grocery chain.
-    // This filters out non-grocery Instacart retailers (clothing, electronics,
-    // pharmacy chains, etc.) without needing an exhaustive blocklist.
-    const knownSlug = nameToSlug(name);
-    if (!knownSlug) {
-      console.log(`[scraper] skipping non-grocery or unknown retailer: ${name}`);
-      continue;
-    }
-
-    // Use Instacart's own slug/id for cart URLs if available, otherwise use ours
-    const instacartSlug = String(retailer.slug ?? retailer.id ?? knownSlug);
-    const coords = retailer.coordinates as Record<string, number> | undefined;
-    shells.push({
-      slug: instacartSlug,
-      name,
-      logoUrl: String(retailer.logo_url ?? ""),
-      apiLat: coords?.latitude,
-      apiLng: coords?.longitude,
-      index: shells.length,
-    });
-    if (shells.length >= 15) break;
-  }
-
-  // Second pass: geocode stores and filter by radius.
-  // Sequential with 120ms gap to respect Nominatim's 1-req/sec policy.
-  const results: Retailer[] = [];
-  for (const s of shells) {
-    let coords: ZipCoords | null = null;
-    let fromApi = false;
-
-    if (s.apiLat !== undefined && s.apiLng !== undefined) {
-      coords = { lat: s.apiLat, lng: s.apiLng };
-      fromApi = true;
-    } else {
-      coords = await geocodeStore(s.name, zip, center);
-      // Brief pause between Nominatim requests
-      await new Promise((r) => setTimeout(r, 120));
-    }
-
-    if (coords) {
-      // If we have a real geocoded position, enforce the radius.
-      // Stores with API coordinates are trusted; geocoded results are checked.
-      if (!fromApi && center) {
-        const dist = haversineDistance(center.lat, center.lng, coords.lat, coords.lng);
-        if (dist > radiusInMiles) {
-          console.log(`[scraper] "${s.name}" geocoded ${dist.toFixed(1)}mi away — outside ${radiusInMiles}mi radius, skipping`);
-          continue;
-        }
-      }
-      console.log(`[scraper] "${s.name}" accepted`);
-      results.push({ id: `${s.slug}__ic`, name: s.name, logoUrl: s.logoUrl, postalCode: zip, lat: coords.lat, lng: coords.lng });
-    } else {
-      // Geocoding failed entirely — include the store without coordinates
-      // (it will still appear in the list but won't have a map pin)
-      console.log(`[scraper] geocode failed for "${s.name}", including without coords`);
-      results.push({ id: `${s.slug}__ic`, name: s.name, logoUrl: s.logoUrl, postalCode: zip });
-    }
-  }
-
-  return results;
-}
-
-/**
- * Recursively searches a JSON object for an array of retailer-shaped objects.
- * Instacart's GraphQL responses nest retailer data at various depths.
- * A "retailer" is identified as an object with both a name and a slug/id.
- */
-function isRetailerObject(item: unknown): item is Record<string, unknown> {
-  if (typeof item !== "object" || item === null) return false;
-  const o = item as Record<string, unknown>;
-  // Require `slug` (or `retailer_key`) — grocery products have `name`+`id`
-  // but never a slug. Instacart retailer objects always carry a slug.
-  const hasName = typeof o.name === "string" && o.name.length > 0;
-  const hasSlug = typeof o.slug === "string" || typeof o.retailer_key === "string";
-  return hasName && hasSlug;
-}
-
-function findRetailersInJson(obj: unknown, depth = 0): Record<string, unknown>[] {
-  if (depth > 10 || obj === null || typeof obj !== "object") return [];
-
-  if (Array.isArray(obj)) {
-    if (obj.length === 0) return [];
-
-    // Pattern 1: flat array of retailer objects
-    if (obj.every(isRetailerObject)) return obj as Record<string, unknown>[];
-
-    // Pattern 2: Instacart shops[].retailer — { id, retailer: { id, slug, name } }
-    const allHaveRetailer = obj.every(
-      (item) =>
-        typeof item === "object" &&
-        item !== null &&
-        "retailer" in item &&
-        isRetailerObject((item as Record<string, unknown>).retailer)
-    );
-    if (allHaveRetailer) {
-      return obj.map((item) => (item as Record<string, unknown>).retailer as Record<string, unknown>);
-    }
-
-    // Pattern 3: GraphQL edges[].node — array of { node: { name, slug, ... } }
-    const allEdges = obj.every(
-      (item) => typeof item === "object" && item !== null && "node" in item
-    );
-    if (allEdges) {
-      const nodes = obj.map((item) => (item as Record<string, unknown>).node);
-      if (nodes.every(isRetailerObject)) return nodes as Record<string, unknown>[];
-      for (const node of nodes) {
-        const found = findRetailersInJson(node, depth + 1);
-        if (found.length > 0) return found;
-      }
-    }
-
-    // Pattern 3: recurse into each element
-    for (const item of obj) {
-      const found = findRetailersInJson(item, depth + 1);
-      if (found.length > 0) return found;
-    }
-    return [];
-  }
-
-  // Plain object — check for GraphQL `nodes` key first (common shorthand)
-  const o = obj as Record<string, unknown>;
-  if (Array.isArray(o.nodes) && o.nodes.length > 0) {
-    if (o.nodes.every(isRetailerObject)) return o.nodes as Record<string, unknown>[];
-    const found = findRetailersInJson(o.nodes, depth + 1);
-    if (found.length > 0) return found;
-  }
-
-  // Recurse into all values
-  for (const value of Object.values(o)) {
-    const found = findRetailersInJson(value, depth + 1);
-    if (found.length > 0) return found;
-  }
-  return [];
-}
-
-/**
- * Navigates instacart.com with a stealth browser, types the ZIP into the
- * location input, and intercepts the retailers API response.
- * Returns null if no retailers are found (triggers fallback).
- */
-/**
- * Makes an authenticated Instacart API call using stored user cookies.
- * Returns null if no cookies are available for the user.
- */
-async function instacartFetch(
-  url: string,
-  cookieString: string
-): Promise<Response> {
-  return fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
-        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      Accept: "application/json",
-      "Accept-Language": "en-US,en;q=0.9",
-      Cookie: cookieString,
-    },
-  });
-}
 
 /**
  * Injects stored Instacart cookies into a Playwright browser context.
@@ -736,72 +487,133 @@ async function scrapeInstacartStores(
   }
 }
 
-function addOffset(coord: number, i: number): number {
-  const offsets = [0.010, -0.010, 0.015, -0.015, 0.008, -0.008];
-  return coord + (offsets[i % offsets.length] ?? 0);
-}
 
 
 // ---------------------------------------------------------------------------
-// Product pricing — full page interception with stealth
+// Product pricing — DOM scraping with concurrency limit
 // ---------------------------------------------------------------------------
 
 const PRICE_CACHE = new Map<string, { match: ProductMatch; expiresAt: number }>();
 const PRICE_CACHE_TTL = 60 * 60 * 1_000;
+
+// At most 2 Chromium instances open at the same time — more than this
+// causes page.goto to timeout as the OS runs out of file descriptors / memory.
+const MAX_CONCURRENT = 2;
+let activeBrowsers = 0;
+const browserQueue: Array<() => void> = [];
+
+async function acquireBrowserSlot(): Promise<void> {
+  if (activeBrowsers < MAX_CONCURRENT) {
+    activeBrowsers++;
+    return;
+  }
+  await new Promise<void>((resolve) => browserQueue.push(resolve));
+  activeBrowsers++;
+}
+
+function releaseBrowserSlot(): void {
+  activeBrowsers--;
+  const next = browserQueue.shift();
+  if (next) next();
+}
+
+
+/**
+ * Word-overlap similarity between two product name strings.
+ * Returns a value in [0, 1] — 1 means all shorter-string words appear in
+ * the longer string. Words shorter than 3 chars are ignored (articles, units).
+ */
+function wordSimilarity(a: string, b: string): number {
+  const normalize = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((w) => w.length > 2);
+  const wordsA = new Set(normalize(a));
+  const wordsB = new Set(normalize(b));
+  if (wordsA.size === 0 || wordsB.size === 0) return 0;
+  const intersection = [...wordsA].filter((w) => wordsB.has(w)).length;
+  return intersection / Math.min(wordsA.size, wordsB.size);
+}
+
+/**
+ * Builds a list of search terms to try in order, from most specific to
+ * most generic. Progressive fallback ensures that brand-specific queries
+ * are tried first; if Instacart finds nothing, we widen the search.
+ *
+ * Examples:
+ *   name="Boring Oat Milk", brandPref="Oatly"
+ *     → ["Boring Oat Milk Oatly", "Boring Oat Milk", "Oat Milk", "Oatly"]
+ *
+ *   name="Organic Valley Whole Milk 64 oz", brandPref=undefined
+ *     → ["Organic Valley Whole Milk 64 oz", "Organic Valley Whole Milk", "Whole Milk"]
+ */
+function buildSearchTerms(name: string, brandPref?: string): string[] {
+  const terms: string[] = [];
+
+  // Strip obvious size/unit tokens to get the "core" name
+  const sizePattern = /\b\d+(\.\d+)?\s*(oz|ml|g|kg|lb|lbs|l|fl|ct|pk|pack|count|each)\b/gi;
+  const coreName = name.replace(sizePattern, "").replace(/\s{2,}/g, " ").trim();
+  const coreWords = coreName.split(/\s+/);
+
+  // 1. Full name + brand pref (most specific)
+  if (brandPref) terms.push(`${name} ${brandPref}`);
+
+  // 2. Full name as-is
+  terms.push(name);
+
+  // 3. Core name (no size tokens) + brand pref
+  if (brandPref && coreName !== name) terms.push(`${coreName} ${brandPref}`);
+
+  // 4. Core name
+  if (coreName !== name) terms.push(coreName);
+
+  // 5. Last 3 core words (drops leading brand/adjective words)
+  if (coreWords.length > 3) terms.push(coreWords.slice(-3).join(" "));
+
+  // 6. Last 2 core words (most generic ingredient)
+  if (coreWords.length >= 2) terms.push(coreWords.slice(-2).join(" "));
+
+  // 7. First word alone + brand pref (e.g. "Lactaid Oatly")
+  if (brandPref && coreWords.length >= 1) terms.push(`${coreWords[0]} ${brandPref}`);
+
+  // 8. Last word alone (single most important noun)
+  if (coreWords.length >= 2) terms.push(coreWords[coreWords.length - 1]);
+
+  // 9. Brand pref alone (if the name search completely fails)
+  if (brandPref) terms.push(brandPref);
+
+  // Deduplicate, preserving order
+  const seen = new Set<string>();
+  return terms.filter((t) => {
+    const k = t.toLowerCase().trim();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return k.length > 0;
+  });
+}
 
 export async function scrapeProduct(
   item: GroceryItem,
   retailer: Retailer,
   instacartCookies?: string | null
 ): Promise<ProductMatch> {
-  const key = `${retailer.id}:${item.name.toLowerCase().trim()}`;
-  const cached = PRICE_CACHE.get(key);
+  const cacheKey = `${retailer.id}:${item.name.toLowerCase().trim()}:${item.brandPref ?? ""}`;
+  const cached = PRICE_CACHE.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.match;
 
-  const match = await fetchProductPrice(item, retailer, instacartCookies);
-  PRICE_CACHE.set(key, { match, expiresAt: Date.now() + PRICE_CACHE_TTL });
+  const match = await fetchProductPrice(item, retailer);
+  PRICE_CACHE.set(cacheKey, { match, expiresAt: Date.now() + PRICE_CACHE_TTL });
   return match;
 }
 
 async function fetchProductPrice(
   item: GroceryItem,
   retailer: Retailer,
-  instacartCookies?: string | null
 ): Promise<ProductMatch> {
-  // Fast path: authenticated direct API call — no browser needed
-  if (instacartCookies) {
-    try {
-      const slug = retailer.id.split("__")[0];
-      const term = encodeURIComponent(item.name.trim());
-      const res = await instacartFetch(
-        `https://www.instacart.com/v3/containers/${slug}/items_v2?term=${term}&source=search&per_page=1`,
-        instacartCookies
-      );
-      console.log(`[scraper] authenticated items API → ${res.status} for "${item.name}" @ ${slug}`);
-      if (res.ok) {
-        const json = (await res.json()) as Record<string, unknown>;
-        const candidates = findRetailersInJson(json);
-        if (candidates.length > 0) {
-          const first = candidates[0];
-          const matchedName = String(first.name ?? item.name);
-          const productId = String(first.id ?? "");
-          const priceRaw =
-            first.price ??
-            (first.attributes as Record<string, unknown> | undefined)?.price ??
-            first.price_string;
-          let price = 0;
-          if (typeof priceRaw === "number") price = priceRaw;
-          else if (typeof priceRaw === "string") price = parseFloat(priceRaw.replace(/[^0-9.]/g, ""));
-          if (!isNaN(price) && price > 0) {
-            console.log(`[scraper] "${item.name}" @ ${slug} → "${matchedName}" $${price} (authenticated)`);
-            return { item, matchedName, price, upc: productId || undefined, retailerId: retailer.id };
-          }
-        }
-      }
-    } catch (err) {
-      console.warn(`[scraper] authenticated items fetch error:`, err);
-    }
-  }
+  const slug = retailer.id.split("__")[0];
+  const searchTerms = buildSearchTerms(item.name, item.brandPref);
+
+  // ── Browser path: DOM scraping (rate-limited) ────────────────────────────
+  await acquireBrowserSlot();
+
   const browser = await chromium.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
@@ -815,105 +627,101 @@ async function fetchProductPrice(
     viewport: { width: 1280, height: 800 },
   });
 
-  // Inject stealth patches before any page JS runs
   await context.addInitScript(STEALTH_SCRIPT);
-
   const page = await context.newPage();
 
-  let matchedName = item.name;
-  let price = 0;
-  let productId: string | undefined;
-
-  // Intercept any XHR that looks like a product/items search response
-  const responsePromise = new Promise<void>((resolve) => {
-    page.on("response", async (response) => {
-      const url = response.url();
-      if (price > 0) return; // already found
-      if (
-        !url.includes("instacart.com") ||
-        (!url.includes("/items") && !url.includes("/search") && !url.includes("/products"))
-      ) return;
-      if (!response.ok()) return;
-
-      try {
-        const text = await response.text();
-        if (!text.startsWith("{") && !text.startsWith("[")) return; // not JSON
-
-        const json = JSON.parse(text) as Record<string, unknown>;
-
-        // Instacart's response shape has changed several times;
-        // probe all known paths
-        const candidates: unknown[] =
-          (json?.items as unknown[]) ??
-          ((json?.data as Record<string, unknown>)?.items as unknown[]) ??
-          ((
-            (json?.data as Record<string, unknown>)
-              ?.body as Array<Record<string, unknown>>
-          )?.[0]?.view as Record<string, unknown>)?.items as unknown[] ??
-          [];
-
-        console.log(
-          `[scraper] intercepted ${url.split("?")[0]} — candidates: ${candidates.length}`
-        );
-
-        const first = candidates[0] as Record<string, unknown> | undefined;
-        if (!first) return;
-
-        matchedName = String(first.name ?? item.name);
-        productId = String(first.id ?? "");
-
-        // Price may arrive as a number, "$X.XX" string, or inside attributes
-        const priceRaw =
-          first.price ??
-          (first.attributes as Record<string, unknown> | undefined)?.price ??
-          first.price_string ??
-          (first.pricing as Record<string, unknown> | undefined)?.price;
-
-        if (typeof priceRaw === "number") {
-          price = priceRaw;
-        } else if (typeof priceRaw === "string") {
-          price = parseFloat(priceRaw.replace(/[^0-9.]/g, ""));
-        }
-
-        if (isNaN(price)) price = 0;
-        if (price > 0) resolve();
-      } catch {
-        // Non-JSON or unexpected shape — skip
-      }
-    });
-  });
-
   try {
-    // Strip the OSM element suffix (e.g. "giant__343241124" → "giant")
-    const slug = retailer.id.split("__")[0];
-    const term = encodeURIComponent(item.name.trim());
-    const url = `https://www.instacart.com/store/${slug}/search_v3/${term}`;
-    console.log(`[scraper] navigating → ${url}`);
-
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-
-    // Wait up to 8 seconds for the XHR to fire and be intercepted
-    await Promise.race([
-      responsePromise,
-      page.waitForTimeout(8_000),
-    ]);
-  } catch (err) {
-    console.warn(`[scraper] navigation error for "${item.name}":`, err);
+    for (const term of searchTerms) {
+      const result = await tryBrowserSearch(page, slug, term, item.name);
+      if (result) {
+        console.log(`[scraper] "${item.name}" @ ${slug} → "${result.matchedName}" $${result.price} (term="${term}")`);
+        return { item, matchedName: result.matchedName, price: result.price, upc: result.productId, retailerId: retailer.id };
+      }
+    }
   } finally {
     await browser.close();
+    releaseBrowserSlot();
   }
 
-  console.log(
-    `[scraper] "${item.name}" @ ${retailer.id} → "${matchedName}" $${price}`
-  );
+  console.log(`[scraper] "${item.name}" @ ${slug} → no match found across ${searchTerms.length} terms`);
+  return { item, matchedName: item.name, price: 0, retailerId: retailer.id };
+}
 
-  return {
-    item,
-    matchedName,
-    price: isNaN(price) ? 0 : price,
-    upc: productId || undefined,
-    retailerId: retailer.id,
-  };
+/**
+ * Tries a single search term in an already-open Playwright page.
+ * Navigates to the Instacart search URL, waits for product cards to render,
+ * then reads name + price directly from the DOM.
+ */
+async function tryBrowserSearch(
+  page: import("playwright").Page,
+  slug: string,
+  searchTerm: string,
+  originalItemName: string
+): Promise<{ matchedName: string; price: number; productId?: string } | null> {
+  const url = `https://www.instacart.com/store/${slug}/s?k=${encodeURIComponent(searchTerm.trim()).replace(/%20/g, "+")}`;
+  console.log(`[scraper] browser → ${url}`);
+
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+
+    // Wait until at least one "$X.XX" price appears anywhere in the page text.
+    // This is class-name-agnostic and works regardless of React's hashed classes.
+    await page.waitForFunction(
+      () => /\$\d+\.\d{2}/.test(document.body.innerText),
+      { timeout: 10_000 }
+    ).catch(() => null);
+
+    // Walk all text nodes looking for price patterns, then pair each price with
+    // the nearest product name in the same card (<li> or <article> ancestor).
+    const products = await page.evaluate(() => {
+      const priceRegex = /\$(\d+\.\d{2})/;
+      const results: { name: string; price: number }[] = [];
+      const seen = new Set<Element>();
+
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let node: Node | null;
+      while ((node = walker.nextNode())) {
+        const text = node.textContent ?? "";
+        const match = text.match(priceRegex);
+        if (!match) continue;
+        const price = parseFloat(match[1]);
+        if (price <= 0) continue;
+
+        // Walk up to the nearest list item or article (the product card boundary)
+        let card: HTMLElement | null = node.parentElement;
+        while (card && card !== document.body && !["LI", "ARTICLE"].includes(card.tagName)) {
+          card = card.parentElement as HTMLElement | null;
+        }
+        if (!card || seen.has(card)) continue;
+        seen.add(card);
+
+        // The product name is the longest non-price, non-numeric text line in the card
+        const lines = (card.innerText ?? "")
+          .split("\n")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 4 && !priceRegex.test(s) && !/^\d+$/.test(s));
+        const name = lines.sort((a, b) => b.length - a.length)[0] ?? "";
+        if (!name) continue;
+
+        results.push({ name, price });
+      }
+      return results;
+    });
+
+    console.log(`[scraper] DOM found ${products.length} products for "${searchTerm}" @ ${slug}`);
+    if (products.length === 0) return null;
+
+    // Pick the product whose name best matches what the user asked for
+    const best = products.reduce((a, b) =>
+      wordSimilarity(originalItemName, b.name) > wordSimilarity(originalItemName, a.name) ? b : a
+    );
+
+    console.log(`[scraper] best DOM match: "${best.name}" $${best.price}`);
+    return { matchedName: best.name, price: best.price };
+  } catch (err) {
+    console.warn(`[scraper] browser error (term="${searchTerm}"):`, err);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -933,7 +741,7 @@ export function buildCartUrl(retailer: Retailer, items: ProductMatch[]): string 
     return params ? `https://www.walmart.com/cart?${params}` : "https://www.walmart.com";
   }
 
-  // All other retailers: link to their Instacart store page.
+  // All other retailers: link to their Instacart storefront.
   // Instacart Partner API is the upgrade path for full cart pre-population.
-  return `https://www.instacart.com/store/${slug}`;
+  return `https://www.instacart.com/store/${slug}/storefront`;
 }

@@ -110,7 +110,7 @@ export default function Dashboard() {
   const [pricingLoading, setPricingLoading] = useState(false);
   const [pricingError, setPricingError] = useState<string | null>(null);
   const [winnerStore, setWinnerStore] = useState<Retailer | null>(null);
-  const [cartLoading, setCartLoading] = useState(false);
+  const [brandPrefs, setBrandPrefsState] = useState<Record<string, string>>({});
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationName, setLocationName] = useState<string | null>(null);
@@ -186,11 +186,15 @@ export default function Dashboard() {
   }
   function removeItem(id: string) {
     setItems((prev) => prev.filter((i) => i.id !== id));
+    setBrandPrefsState((prev) => { const next = { ...prev }; delete next[id]; return next; });
   }
   function updateQty(id: string, delta: number) {
     setItems((prev) =>
       prev.map((i) => (i.id === id ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i))
     );
+  }
+  function setBrandPref(id: string, val: string) {
+    setBrandPrefsState((prev) => ({ ...prev, [id]: val }));
   }
 
   // ── Store fetch ─────────────────────────────────────────────────────────────
@@ -251,10 +255,16 @@ export default function Dashboard() {
         return;
       }
 
+      // Attach brand preferences to each item before sending to the scraper
+      const itemsWithPrefs = items.map((item) => ({
+        ...item,
+        brandPref: brandPrefs[item.id] || undefined,
+      }));
+
       const pricingRes = await fetch("/api/pricing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, stores: nearbyStores }),
+        body: JSON.stringify({ items: itemsWithPrefs, stores: nearbyStores }),
       });
       if (!pricingRes.ok) throw new Error("Failed to fetch pricing");
 
@@ -268,46 +278,25 @@ export default function Dashboard() {
     }
   }
 
-  // ── Add to cart ─────────────────────────────────────────────────────────────
-  async function handleAddToCart(comparison: PriceComparison) {
-    const cartItems = comparison.items
-      .filter((m) => m.upc && m.price > 0)
-      .map((m) => ({ upc: m.upc!, quantity: m.item.quantity }));
+  // ── Instacart checkout ──────────────────────────────────────────────────────
+  function handleAddToCart(comparison: PriceComparison) {
+    const slug = comparison.retailer.id.split("__")[0].toLowerCase();
 
-    if (cartItems.length === 0) { setPricingError("No items with valid UPCs to add."); return; }
-
-    setCartLoading(true);
-    setPricingError(null);
-
-    try {
-      const res = await fetch("/api/cart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: cartItems }),
-      });
-
-      if (res.status === 401) {
-        const data = (await res.json()) as { error: string };
-        if (data.error === "KROGER_AUTH_REQUIRED") {
-          const authRes = await fetch("/api/auth/kroger/url");
-          if (authRes.ok) {
-            const { url } = (await authRes.json()) as { url: string };
-            window.location.href = url;
-          } else {
-            setPricingError("Failed to start Kroger authorization. Please try again.");
-          }
-          return;
-        }
-      }
-
-      if (!res.ok) throw new Error("Failed to add to cart");
-      setOrderPlaced(true);
-      setScreen("track");
-    } catch (err) {
-      setPricingError(err instanceof Error ? err.message : "Failed to add to cart.");
-    } finally {
-      setCartLoading(false);
+    let url: string;
+    if (slug === "walmart") {
+      const params = comparison.items
+        .filter((m) => m.upc && m.price > 0)
+        .map((m) => `items[]=${encodeURIComponent(m.upc!)}`)
+        .join("&");
+      url = params ? `https://www.walmart.com/cart?${params}` : "https://www.walmart.com";
+    } else {
+      url = `https://www.instacart.com/store/${slug}/storefront`;
     }
+
+    window.open(url, "_blank", "noopener,noreferrer");
+    setOrderPlaced(true);
+    setWinnerStore(comparison.retailer);
+    setScreen("checkout");
   }
 
   const locationId = stores[0]?.id;
@@ -356,6 +345,8 @@ export default function Dashboard() {
     addItem,
     removeItem,
     updateQty,
+    brandPrefs,
+    setBrandPref,
     zip,
     setZip: handleZipChange,
     radius,
@@ -372,7 +363,6 @@ export default function Dashboard() {
     setPricingError,
     winnerStore,
     setWinnerStore,
-    cartLoading,
     findPrices,
     handleAddToCart,
     onNavigate: setScreen,
