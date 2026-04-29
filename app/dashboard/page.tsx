@@ -196,6 +196,9 @@ export default function Dashboard() {
   function setBrandPref(id: string, val: string) {
     setBrandPrefsState((prev) => ({ ...prev, [id]: val }));
   }
+  function setSize(id: string, size: import("@/lib/types").ItemSize | undefined) {
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, size } : i));
+  }
 
   // ── Store fetch ─────────────────────────────────────────────────────────────
   const fetchStores = useCallback(async (zipCode: string, radiusInMiles: number): Promise<Retailer[]> => {
@@ -347,6 +350,7 @@ export default function Dashboard() {
     updateQty,
     brandPrefs,
     setBrandPref,
+    setSize,
     zip,
     setZip: handleZipChange,
     radius,
