@@ -11,8 +11,9 @@ export default function PriceDisclaimer() {
         borderLeft: "2px solid var(--border)",
       }}
     >
-      Estimated subtotal based on current Kroger listed prices. Final total
-      including fees and promotions may vary.
+      Estimated subtotal based on current Instacart listed prices. Final total
+      may vary and does not include delivery fees, service fees, taxes, or
+      promotions applied at checkout.
     </p>
   );
 }
