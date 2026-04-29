@@ -1,11 +1,14 @@
+export type ItemSize = "S" | "M" | "L";
+
 export interface GroceryItem {
   id: string;
   name: string;
   quantity: number;
   unit: string;
-  upc?: string;       // pre-resolved from autocomplete
-  imageUrl?: string;  // product thumbnail
-  brandPref?: string; // user-supplied brand preference (appended to scraper search query)
+  upc?: string;
+  imageUrl?: string;
+  brandPref?: string;
+  size?: ItemSize; // S < 20 oz · M 20–79 oz · L ≥ 80 oz
 }
 
 export interface ProductSuggestion {

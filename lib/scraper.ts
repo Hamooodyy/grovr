@@ -496,6 +496,35 @@ async function scrapeInstacartStores(
 const PRICE_CACHE = new Map<string, { match: ProductMatch; expiresAt: number }>();
 const PRICE_CACHE_TTL = 60 * 60 * 1_000;
 
+/**
+ * Extracts a normalized size in oz from a product name string.
+ * Handles "fl oz", "oz", and "lb" (1 lb = 16 oz).
+ */
+function extractOz(name: string): number | null {
+  const ozMatch = name.match(/(\d+(?:\.\d+)?)\s*(?:fl[\s-]?)?oz\b/i);
+  if (ozMatch) return parseFloat(ozMatch[1]);
+  const lbMatch = name.match(/(\d+(?:\.\d+)?)\s*lb\b/i);
+  if (lbMatch) return parseFloat(lbMatch[1]) * 16;
+  return null;
+}
+
+/**
+ * Returns a bonus score [−0.5, +1] based on how well a product's size
+ * matches the user's S / M / L preference.
+ *   S  →  < 20 oz   (pint, single-serve, small carton)
+ *   M  →  20–79 oz  (quart, standard package)
+ *   L  →  ≥ 80 oz   (half-gallon, gallon, family size, 5 lb+)
+ */
+function sizeScore(productName: string, size?: import("./types").ItemSize): number {
+  if (!size) return 0;
+  const oz = extractOz(productName);
+  if (oz === null) return 0;
+  if (size === "S" && oz < 20) return 1;
+  if (size === "M" && oz >= 20 && oz < 80) return 1;
+  if (size === "L" && oz >= 80) return 1;
+  return -0.5; // wrong size — deprioritize
+}
+
 // At most 2 Chromium instances open at the same time — more than this
 // causes page.goto to timeout as the OS runs out of file descriptors / memory.
 const MAX_CONCURRENT = 2;
@@ -632,7 +661,7 @@ async function fetchProductPrice(
 
   try {
     for (const term of searchTerms) {
-      const result = await tryBrowserSearch(page, slug, term, item.name);
+      const result = await tryBrowserSearch(page, slug, term, item.name, item.size);
       if (result) {
         console.log(`[scraper] "${item.name}" @ ${slug} → "${result.matchedName}" $${result.price} (term="${term}")`);
         return { item, matchedName: result.matchedName, price: result.price, upc: result.productId, retailerId: retailer.id };
@@ -656,7 +685,8 @@ async function tryBrowserSearch(
   page: import("playwright").Page,
   slug: string,
   searchTerm: string,
-  originalItemName: string
+  originalItemName: string,
+  size?: import("./types").ItemSize
 ): Promise<{ matchedName: string; price: number; productId?: string } | null> {
   const url = `https://www.instacart.com/store/${slug}/s?k=${encodeURIComponent(searchTerm.trim()).replace(/%20/g, "+")}`;
   console.log(`[scraper] browser → ${url}`);
@@ -711,10 +741,12 @@ async function tryBrowserSearch(
     console.log(`[scraper] DOM found ${products.length} products for "${searchTerm}" @ ${slug}`);
     if (products.length === 0) return null;
 
-    // Pick the product whose name best matches what the user asked for
-    const best = products.reduce((a, b) =>
-      wordSimilarity(originalItemName, b.name) > wordSimilarity(originalItemName, a.name) ? b : a
-    );
+    // Pick the product whose name + size bucket best matches what the user asked for
+    const best = products.reduce((a, b) => {
+      const scoreA = wordSimilarity(originalItemName, a.name) + sizeScore(a.name, size);
+      const scoreB = wordSimilarity(originalItemName, b.name) + sizeScore(b.name, size);
+      return scoreB > scoreA ? b : a;
+    });
 
     console.log(`[scraper] best DOM match: "${best.name}" $${best.price}`);
     return { matchedName: best.name, price: best.price };

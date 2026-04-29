@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { GroceryItem } from "@/lib/types";
+import type { GroceryItem, ItemSize } from "@/lib/types";
 
 interface AddItemBarProps {
   query: string;
@@ -124,17 +124,94 @@ function EmptyState() {
   );
 }
 
+const SIZE_LABELS: { value: ItemSize; label: string; title: string; examples: string }[] = [
+  { value: "S", label: "S", title: "Small  · < 20 oz",     examples: "pint of cream, 16 oz soup, snack pack" },
+  { value: "M", label: "M", title: "Medium · 20–79 oz",    examples: "quart of milk, standard loaf, regular box" },
+  { value: "L", label: "L", title: "Large  · ≥ 80 oz",     examples: "gallon of milk, family-size, 5 lb bag" },
+];
+
+function SizePill({
+  value, label, title, examples, active, onToggle,
+}: {
+  value: ItemSize; label: string; title: string; examples: string;
+  active: boolean; onToggle: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div style={{ position: "relative", display: "inline-flex" }}>
+      <button
+        onClick={onToggle}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: 6,
+          border: active ? "1.5px solid var(--green)" : "1.5px solid var(--border)",
+          background: active ? "var(--green)" : "white",
+          color: active ? "white" : "var(--muted)",
+          fontSize: 10,
+          fontWeight: 700,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+          lineHeight: 1,
+        }}
+      >
+        {label}
+      </button>
+      {hovered && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 6px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#1a1a1a",
+            color: "white",
+            borderRadius: 8,
+            padding: "7px 10px",
+            fontSize: 11,
+            whiteSpace: "nowrap",
+            zIndex: 100,
+            pointerEvents: "none",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 2 }}>{title}</div>
+          <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 10 }}>{examples}</div>
+          {/* Arrow */}
+          <div style={{
+            position: "absolute",
+            top: "100%",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 0,
+            height: 0,
+            borderLeft: "5px solid transparent",
+            borderRight: "5px solid transparent",
+            borderTop: "5px solid #1a1a1a",
+          }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface ItemListProps {
   items: GroceryItem[];
   expandedPref: string | null;
   setExpandedPref: (id: string | null) => void;
   brandPrefs: Record<string, string>;
   setBrandPref: (id: string, val: string) => void;
+  setSize: (id: string, size: ItemSize | undefined) => void;
   updateQty: (id: string, delta: number) => void;
   removeItem: (id: string) => void;
 }
 
-function ItemList({ items, expandedPref, setExpandedPref, brandPrefs, setBrandPref, updateQty, removeItem }: ItemListProps) {
+function ItemList({ items, expandedPref, setExpandedPref, brandPrefs, setBrandPref, setSize, updateQty, removeItem }: ItemListProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {items.map((item) => {
@@ -182,9 +259,20 @@ function ItemList({ items, expandedPref, setExpandedPref, brandPrefs, setBrandPr
                     flexWrap: "wrap",
                   }}
                 >
-                  {item.unit !== "each" && (
-                    <span style={{ color: "var(--muted)", fontSize: 12 }}>{item.unit}</span>
-                  )}
+                  {/* Size pills */}
+                  <div style={{ display: "flex", gap: 3 }}>
+                    {SIZE_LABELS.map(({ value, label, title, examples }) => (
+                      <SizePill
+                        key={value}
+                        value={value}
+                        label={label}
+                        title={title}
+                        examples={examples}
+                        active={item.size === value}
+                        onToggle={() => setSize(item.id, item.size === value ? undefined : value)}
+                      />
+                    ))}
+                  </div>
                   {hasPref ? (
                     <span
                       onClick={() => setExpandedPref(prefOpen ? null : item.id)}
@@ -369,6 +457,7 @@ interface Props {
   updateQty: (id: string, delta: number) => void;
   brandPrefs: Record<string, string>;
   setBrandPref: (id: string, val: string) => void;
+  setSize: (id: string, size: ItemSize | undefined) => void;
   pricingLoading: boolean;
   pricingError: string | null;
   setPricingError: (e: string | null) => void;
@@ -384,6 +473,7 @@ export default function ShoppingList({
   updateQty,
   brandPrefs,
   setBrandPref,
+  setSize,
   pricingLoading,
   pricingError,
   setPricingError,
@@ -452,6 +542,7 @@ export default function ShoppingList({
                 setExpandedPref={setExpandedPref}
                 brandPrefs={brandPrefs}
                 setBrandPref={setBrandPref}
+                setSize={setSize}
                 updateQty={updateQty}
                 removeItem={removeItem}
               />
@@ -639,6 +730,7 @@ export default function ShoppingList({
                 setExpandedPref={setExpandedPref}
                 brandPrefs={brandPrefs}
                 setBrandPref={setBrandPref}
+                setSize={setSize}
                 updateQty={updateQty}
                 removeItem={removeItem}
               />
