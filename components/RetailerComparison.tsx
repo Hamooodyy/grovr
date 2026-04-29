@@ -302,144 +302,123 @@ function StoreList({
   );
 }
 
-function DetailsTable({ comparisons, items }: { comparisons: PriceComparison[]; items: GroceryItem[] }) {
-  const top3 = comparisons.slice(0, 3);
+function ItemDetailCard({ item, comparisons }: { item: GroceryItem; comparisons: PriceComparison[] }) {
+  const [open, setOpen] = useState(false);
+
+  const rows = comparisons.map((c) => {
+    const match = c.items.find((m) => m.item.id === item.id);
+    return { retailer: c.retailer, matchedName: match?.matchedName ?? "", price: match?.price ?? 0 };
+  });
+  const prices = rows.map((r) => r.price).filter((p) => p > 0);
+  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+  const bestRow = rows.find((r) => r.price === minPrice && minPrice > 0);
+
   return (
-    <div
-      style={{
-        background: "white",
-        borderRadius: 14,
-        overflow: "hidden",
-        border: "1px solid var(--border)",
-      }}
-    >
-      <div
+    <div style={{ background: "white", borderRadius: 14, border: "1px solid var(--border)", overflow: "hidden" }}>
+      {/* Clickable header */}
+      <button
+        onClick={() => setOpen((o) => !o)}
         style={{
-          display: "grid",
-          gridTemplateColumns: `1fr repeat(${top3.length}, 96px)`,
-          padding: "10px 14px",
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "12px 14px",
           background: "var(--bg)",
-          borderBottom: "1px solid var(--border)",
-          gap: 4,
+          border: "none",
+          borderBottom: open ? "1px solid var(--border)" : "none",
+          cursor: "pointer",
+          textAlign: "left",
         }}
       >
-        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", alignSelf: "center" }}>Item</span>
-        {top3.map((c, i) => {
-          const isCheapest = i === 0;
-          return (
-            <div
-              key={c.retailer.id}
-              style={{
-                textAlign: "right",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "flex-end",
-                gap: 2,
-              }}
-            >
-              {isCheapest && (
-                <span
-                  style={{
-                    background: "var(--green)",
-                    color: "white",
-                    fontSize: 9,
-                    fontWeight: 700,
-                    borderRadius: 99,
-                    padding: "1px 6px",
-                    letterSpacing: "0.05em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Best
-                </span>
-              )}
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: isCheapest ? "var(--green)" : "var(--text)",
-                  lineHeight: 1.2,
-                }}
-              >
-                {c.retailer.name}
-              </span>
-              <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 500 }}>
-                ZIP {c.retailer.postalCode}
-              </span>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: isCheapest ? "var(--green)" : "var(--muted)",
-                }}
-              >
-                {fmt(c.subtotal)}
-              </span>
+        {/* Chevron */}
+        <svg
+          width="14" height="14" viewBox="0 0 24 24" fill="none"
+          style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
+        >
+          <path d="M6 9l6 6 6-6" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+
+        {/* Item name + size */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 13 }}>{item.name}</div>
+          {item.size && (
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>
+              {item.size === "S" ? "Small · < 20 oz" : item.size === "M" ? "Medium · 20–79 oz" : "Large · ≥ 80 oz"}
             </div>
-          );
-        })}
-      </div>
+          )}
+        </div>
 
-      {items.map((item, idx) => {
-        const prices = top3.map((c) => {
-          const match = c.items.find((m) => m.item.id === item.id);
-          return match?.price ?? 0;
-        });
-        const minP = Math.min(...prices.filter((p) => p > 0));
+        {/* Best price summary when collapsed */}
+        {!open && bestRow && (
+          <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--green)" }}>{fmt(minPrice)}</div>
+            <div style={{ fontSize: 10, color: "var(--muted)", whiteSpace: "nowrap" }}>{bestRow.retailer.name}</div>
+          </div>
+        )}
+        {!open && !bestRow && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#dc2626", background: "#fef2f2", borderRadius: 6, padding: "3px 7px" }}>
+            N/A
+          </span>
+        )}
+      </button>
 
+      {/* Store rows — shown only when expanded */}
+      {open && rows.map((row, i) => {
+        const isBest = row.price > 0 && row.price === minPrice;
+        const isOos = row.price === 0;
         return (
           <div
-            key={item.id}
+            key={row.retailer.id}
             style={{
-              display: "grid",
-              gridTemplateColumns: `1fr repeat(${top3.length}, 96px)`,
-              padding: "12px 14px",
-              borderBottom: idx < items.length - 1 ? "1px solid var(--border)" : "none",
+              display: "flex",
               alignItems: "center",
-              gap: 4,
+              gap: 12,
+              padding: "10px 14px",
+              borderBottom: i < rows.length - 1 ? "1px solid var(--border)" : "none",
+              background: isBest ? "rgba(22,163,74,0.04)" : "white",
             }}
           >
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{item.name}</div>
-              {item.unit !== "each" && (
-                <div style={{ fontSize: 11, color: "var(--muted)" }}>{item.unit}</div>
-              )}
+            <div style={{
+              width: 26, height: 26, borderRadius: 99, flexShrink: 0,
+              background: isBest ? "var(--green)" : "var(--bg)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontWeight: 800, fontSize: 11,
+              color: isBest ? "white" : "var(--muted)",
+            }}>
+              {i + 1}
             </div>
-            {prices.map((p, ci) => (
-              <span
-                key={ci}
-                style={{
-                  textAlign: "right",
-                  fontWeight: p === minP && p > 0 ? 700 : 400,
-                  color: p === minP && p > 0 ? "var(--green)" : "var(--text)",
-                  fontSize: 13,
-                }}
-              >
-                {p > 0 ? (
-                  fmt(p)
-                ) : (
-                  <span
-                    style={{
-                      display: "inline-block",
-                      background: "#fef2f2",
-                      color: "#dc2626",
-                      fontSize: 9,
-                      fontWeight: 700,
-                      borderRadius: 4,
-                      padding: "2px 5px",
-                      letterSpacing: "0.04em",
-                      textTransform: "uppercase",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    Out of stock
-                  </span>
-                )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: isBest ? "var(--green)" : "var(--text)" }}>
+                {row.retailer.name}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {isOos ? "Not found" : row.matchedName}
+              </div>
+            </div>
+            {isOos ? (
+              <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: 10, fontWeight: 700, borderRadius: 6, padding: "3px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>
+                N/A
               </span>
-            ))}
+            ) : (
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: isBest ? "var(--green)" : "var(--text)" }}>{fmt(row.price)}</div>
+                {isBest && prices.length > 1 && <div style={{ fontSize: 10, color: "var(--green)", fontWeight: 600 }}>best price</div>}
+              </div>
+            )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function DetailsTable({ comparisons, items }: { comparisons: PriceComparison[]; items: GroceryItem[] }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {items.map((item) => (
+        <ItemDetailCard key={item.id} item={item} comparisons={comparisons} />
+      ))}
     </div>
   );
 }
