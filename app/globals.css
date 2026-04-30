@@ -28,7 +28,6 @@
 
 html, body {
   height: 100%;
-  overflow: hidden; /* prevent any content from causing page-level scroll */
   width: 100%;
 }
 
