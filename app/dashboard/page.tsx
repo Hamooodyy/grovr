@@ -462,7 +462,7 @@ export default function Dashboard() {
           )}
 
           <div style={{ marginBottom: 12 }}>
-            <UserButton afterSignOutUrl="/" />
+            <UserButton />
           </div>
 
           <div
@@ -545,7 +545,7 @@ export default function Dashboard() {
                 <span style={{ fontSize: 11, color: "var(--green)" }}>items</span>
               </button>
             )}
-            {!isDesktop && <UserButton afterSignOutUrl="/" />}
+            {!isDesktop && <UserButton />}
           </div>
         </div>
 
