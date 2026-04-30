@@ -28,7 +28,7 @@ export async function POST() {
   try {
     // Non-headless — opens a real visible browser window on the user's machine
     browser = await chromium.launch({
-      headless: false,
+      headless: true,
       args: ["--no-sandbox"],
     });
 

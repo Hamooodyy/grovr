@@ -12,6 +12,8 @@ import InstacartConnect from "@/components/InstacartConnect";
 
 const MapScreen = dynamic(() => import("@/components/MapScreen"), { ssr: false });
 
+const SHOW_INSTACART_CONNECT = false;
+
 type Screen = "map" | "list" | "compare" | "checkout" | "track";
 
 const NAV: { id: Screen; label: string; icon: (active: boolean) => React.ReactNode }[] = [
@@ -453,12 +455,14 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div style={{ marginBottom: 12 }}>
-            <InstacartConnect />
-          </div>
+          {SHOW_INSTACART_CONNECT && (
+            <div style={{ marginBottom: 12 }}>
+              <InstacartConnect />
+            </div>
+          )}
 
           <div style={{ marginBottom: 12 }}>
-            <UserButton />
+            <UserButton afterSignOutUrl="/" />
           </div>
 
           <div
@@ -541,12 +545,12 @@ export default function Dashboard() {
                 <span style={{ fontSize: 11, color: "var(--green)" }}>items</span>
               </button>
             )}
-            {!isDesktop && <UserButton />}
+            {!isDesktop && <UserButton afterSignOutUrl="/" />}
           </div>
         </div>
 
         {/* Instacart connection banner — mobile only */}
-        {!isDesktop && (
+        {SHOW_INSTACART_CONNECT && !isDesktop && (
           <div style={{ padding: "10px 16px 0", background: "var(--bg)" }}>
             <InstacartConnect />
           </div>
