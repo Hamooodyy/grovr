@@ -9,11 +9,11 @@
 import type { GroceryItem, ProductMatch, Retailer } from "./types";
 
 export async function getNearbyStores(
-  zipCode: string,
+  address: string,
   radiusInMiles?: number
 ): Promise<Retailer[]> {
   const { getNearbyGroceryStores } = await import("./google-places");
-  return getNearbyGroceryStores(zipCode, radiusInMiles);
+  return getNearbyGroceryStores(address, radiusInMiles);
 }
 
 export async function searchProduct(

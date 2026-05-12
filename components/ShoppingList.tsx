@@ -199,7 +199,6 @@ function ItemList({ items, expandedPref, setExpandedPref, brandPrefs, setBrandPr
               background: "white",
               borderRadius: 14,
               boxShadow: "0 1px 4px rgba(0,20,10,0.06)",
-              overflow: "hidden",
             }}
             className="animate-fade-in"
           >
@@ -433,8 +432,8 @@ interface Props {
   brandPrefs: Record<string, string>;
   setBrandPref: (id: string, val: string) => void;
   setSize: (id: string, size: ItemSize | undefined) => void;
-  zip: string;
-  setZip: (v: string) => void;
+  address: string;
+  setAddress: (v: string) => void;
   storesLoading: boolean;
   locationName: string | null;
   pricingLoading: boolean;
@@ -453,8 +452,8 @@ export default function ShoppingList({
   brandPrefs,
   setBrandPref,
   setSize,
-  zip,
-  setZip,
+  address,
+  setAddress,
   storesLoading,
   locationName,
   pricingLoading,
@@ -643,39 +642,37 @@ export default function ShoppingList({
 
           {items.length > 0 && (
             <div style={{ padding: "16px", borderTop: "1px solid var(--border)" }}>
-              {/* ZIP input */}
+              {/* Address input */}
               <div style={{ marginBottom: 10 }}>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
-                  Your ZIP code
+                  Your address
                 </label>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    value={zip}
-                    onChange={(e) => setZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                    placeholder="e.g. 10001"
-                    maxLength={5}
-                    style={{
-                      flex: 1,
-                      padding: "10px 12px",
-                      border: "1.5px solid var(--border)",
-                      borderRadius: 10,
-                      fontFamily: "inherit",
-                      fontSize: 14,
-                      outline: "none",
-                      background: "var(--bg)",
-                    }}
-                  />
-                  {storesLoading && (
-                    <span style={{ fontSize: 12, color: "var(--muted)" }}>Finding stores…</span>
-                  )}
-                  {!storesLoading && locationName && (
-                    <span style={{ fontSize: 12, color: "var(--green)" }}>{locationName}</span>
-                  )}
-                </div>
+                <input
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="e.g. 123 Main St, Austin, TX 78701"
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    border: "1.5px solid var(--border)",
+                    borderRadius: 10,
+                    fontFamily: "inherit",
+                    fontSize: 14,
+                    outline: "none",
+                    background: "var(--bg)",
+                    boxSizing: "border-box",
+                  }}
+                />
+                {storesLoading && (
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>Finding stores…</div>
+                )}
+                {!storesLoading && locationName && (
+                  <div style={{ fontSize: 12, color: "var(--green)", marginTop: 4 }}>{locationName}</div>
+                )}
               </div>
               <button
                 onClick={findPrices}
-                disabled={pricingLoading}
+                disabled={pricingLoading || !address.trim()}
                 style={{
                   width: "100%",
                   display: "flex",
@@ -687,10 +684,10 @@ export default function ShoppingList({
                   fontFamily: "inherit",
                   fontSize: 15,
                   fontWeight: 600,
-                  cursor: pricingLoading ? "not-allowed" : "pointer",
+                  cursor: pricingLoading || !address.trim() ? "not-allowed" : "pointer",
                   border: "none",
-                  background: "var(--green)",
-                  color: "white",
+                  background: pricingLoading || !address.trim() ? "var(--border)" : "var(--green)",
+                  color: pricingLoading || !address.trim() ? "var(--muted)" : "white",
                   opacity: pricingLoading ? 0.65 : 1,
                   transition: "all 0.15s",
                 }}
@@ -759,13 +756,12 @@ export default function ShoppingList({
             flexShrink: 0,
           }}
         >
-          {/* ZIP input — mobile */}
+          {/* Address input — mobile */}
           <div style={{ marginBottom: 10 }}>
             <input
-              value={zip}
-              onChange={(e) => setZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
-              placeholder="Enter your ZIP code"
-              maxLength={5}
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Enter your address"
               style={{
                 width: "100%",
                 padding: "10px 12px",
@@ -787,7 +783,7 @@ export default function ShoppingList({
           </div>
           <button
             onClick={findPrices}
-            disabled={pricingLoading}
+            disabled={pricingLoading || !address.trim()}
             style={{
               width: "100%",
               display: "flex",
@@ -799,10 +795,10 @@ export default function ShoppingList({
               fontFamily: "inherit",
               fontSize: 15,
               fontWeight: 600,
-              cursor: pricingLoading ? "not-allowed" : "pointer",
+              cursor: pricingLoading || !address.trim() ? "not-allowed" : "pointer",
               border: "none",
-              background: "var(--green)",
-              color: "white",
+              background: pricingLoading || !address.trim() ? "var(--border)" : "var(--green)",
+              color: pricingLoading || !address.trim() ? "var(--muted)" : "white",
               opacity: pricingLoading ? 0.65 : 1,
               transition: "all 0.15s",
             }}

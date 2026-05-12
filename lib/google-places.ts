@@ -2,7 +2,7 @@
  * lib/google-places.ts
  *
  * Discovers nearby grocery stores using the Google Places API (v1 / New).
- * Only returns stores matching the 7 supported chains defined in store-urls.ts.
+ * Only returns stores matching the supported chains defined in store-urls.ts.
  * Unrecognized chains are silently filtered out.
  */
 
@@ -13,23 +13,24 @@ const PLACES_API_URL =
   "https://places.googleapis.com/v1/places:searchNearby";
 
 // ---------------------------------------------------------------------------
-// ZIP geocoding — Nominatim (no API key required)
+// Address geocoding — Google Geocoding API
 // ---------------------------------------------------------------------------
 
-interface ZipCoords {
+interface GeoCoords {
   lat: number;
   lng: number;
 }
 
-const geocodeCache = new Map<string, ZipCoords>();
+const geocodeCache = new Map<string, GeoCoords>();
 
-async function geocodeZip(zip: string): Promise<ZipCoords | null> {
-  if (geocodeCache.has(zip)) return geocodeCache.get(zip)!;
+async function geocodeAddress(address: string): Promise<GeoCoords | null> {
+  const cacheKey = address.toLowerCase().trim();
+  if (geocodeCache.has(cacheKey)) return geocodeCache.get(cacheKey)!;
   try {
     const apiKey = process.env.GOOGLE_PLACES_API_KEY;
     if (!apiKey) return null;
     const res = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?address=${zip}&components=country:US&key=${apiKey}`
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`
     );
     if (!res.ok) return null;
     const data = (await res.json()) as {
@@ -38,7 +39,7 @@ async function geocodeZip(zip: string): Promise<ZipCoords | null> {
     if (!data.results?.length) return null;
     const loc = data.results[0].geometry.location;
     const coords = { lat: loc.lat, lng: loc.lng };
-    geocodeCache.set(zip, coords);
+    geocodeCache.set(cacheKey, coords);
     return coords;
   } catch {
     return null;
@@ -73,16 +74,16 @@ function extractPostalCode(address: string): string | null {
 }
 
 export async function getNearbyGroceryStores(
-  zip: string,
+  address: string,
   radiusInMiles = 10
 ): Promise<Retailer[]> {
-  const cacheKey = `${zip}:${radiusInMiles}`;
+  const cacheKey = `${address.toLowerCase().trim()}:${radiusInMiles}`;
   const cached = STORE_CACHE.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.stores;
 
-  const center = await geocodeZip(zip);
+  const center = await geocodeAddress(address);
   if (!center) {
-    console.warn(`[places] could not geocode ZIP ${zip}`);
+    console.warn(`[places] could not geocode address "${address}"`);
     return [];
   }
 
@@ -94,33 +95,50 @@ export async function getNearbyGroceryStores(
 
   const radiusMeters = Math.round(radiusInMiles * 1609.34);
 
-  const res = await fetch(PLACES_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask":
-        "places.id,places.displayName,places.location,places.formattedAddress",
-    },
-    body: JSON.stringify({
-      locationRestriction: {
-        circle: {
-          center: { latitude: center.lat, longitude: center.lng },
-          radius: radiusMeters,
+  // Search multiple place types in parallel — Target, Walmart, Costco, etc.
+  // are classified as department/discount stores, not grocery stores.
+  const typeGroups = [
+    ["grocery_store", "supermarket"],
+    ["department_store"],
+    ["discount_store"],
+    ["warehouse_store"],
+  ];
+
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Goog-Api-Key": apiKey,
+    "X-Goog-FieldMask":
+      "places.id,places.displayName,places.location,places.formattedAddress",
+  };
+
+  const requests = typeGroups.map((types) =>
+    fetch(PLACES_API_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        locationRestriction: {
+          circle: {
+            center: { latitude: center.lat, longitude: center.lng },
+            radius: radiusMeters,
+          },
         },
-      },
-      includedTypes: ["grocery_store", "supermarket"],
-      maxResultCount: 20,
-    }),
-  });
+        includedTypes: types,
+        maxResultCount: 20,
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          console.warn(`[places] API error ${res.status} for types ${types.join(",")}`);
+          return [] as PlaceResult[];
+        }
+        const data = (await res.json()) as PlacesResponse;
+        return data.places ?? [];
+      })
+      .catch(() => [] as PlaceResult[])
+  );
 
-  if (!res.ok) {
-    console.error(`[places] API error ${res.status}:`, await res.text());
-    return [];
-  }
-
-  const data = (await res.json()) as PlacesResponse;
-  const places = data.places ?? [];
+  const results = await Promise.all(requests);
+  const places = results.flat();
 
   // Deduplicate by chain key — only the first (closest) location per chain
   const seen = new Set<string>();
@@ -134,7 +152,7 @@ export async function getNearbyGroceryStores(
     seen.add(match.key);
 
     const postalCode =
-      extractPostalCode(place.formattedAddress ?? "") ?? zip;
+      extractPostalCode(place.formattedAddress ?? "") ?? "";
 
     stores.push({
       id: `${match.key}__gp`,
@@ -147,7 +165,7 @@ export async function getNearbyGroceryStores(
     });
   }
 
-  console.log(`[places] found ${stores.length} stores near ZIP ${zip}`);
+  console.log(`[places] found ${stores.length} stores near "${address}"`);
   STORE_CACHE.set(cacheKey, { stores, expiresAt: Date.now() + STORE_CACHE_TTL });
   return stores;
 }

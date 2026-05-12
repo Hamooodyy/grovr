@@ -81,7 +81,12 @@ export default function Dashboard() {
 
   // Shared state
   const [items, setItems] = useState<GroceryItem[]>([]);
-  const [zip, setZip] = useState("");
+  const [address, setAddress] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("grovr_address") ?? "";
+    }
+    return "";
+  });
   const [radius, setRadius] = useState(5);
   const [stores, setStores] = useState<Retailer[]>([]);
   const [storesLoading, setStoresLoading] = useState(false);
@@ -94,9 +99,9 @@ export default function Dashboard() {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationName, setLocationName] = useState<string | null>(null);
-  const [hadZip, setHadZip] = useState(false);
+  const [hadAddress, setHadAddress] = useState(false);
 
-  const zipDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const addressDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const radiusDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -109,13 +114,27 @@ export default function Dashboard() {
   // Clear any pending debounce timers when the component unmounts
   useEffect(() => {
     return () => {
-      if (zipDebounceRef.current) clearTimeout(zipDebounceRef.current);
+      if (addressDebounceRef.current) clearTimeout(addressDebounceRef.current);
       if (radiusDebounceRef.current) clearTimeout(radiusDebounceRef.current);
     };
   }, []);
 
-  // ── Auto-detect location ─────────────────────────────────────────────────────
+  // ── Restore saved address on mount ───────────────────────────────────────────
   useEffect(() => {
+    const saved = localStorage.getItem("grovr_address");
+    if (saved && saved.trim().length >= 5) {
+      setStoresLoading(true);
+      fetchStores(saved.trim(), radius)
+        .then((updated) => { setStores(updated); setHadAddress(true); })
+        .catch(() => {})
+        .finally(() => setStoresLoading(false));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Auto-detect location (only if no saved address) ─────────────────────────
+  useEffect(() => {
+    if (localStorage.getItem("grovr_address")) return;
     if (!navigator.geolocation) return;
     setLocationLoading(true);
     navigator.geolocation.getCurrentPosition(
@@ -126,20 +145,26 @@ export default function Dashboard() {
             { headers: { "Accept-Language": "en" } }
           );
           const data = (await res.json()) as {
-            address?: { postcode?: string; city?: string; town?: string; village?: string; state?: string; state_code?: string };
+            display_name?: string;
+            address?: { road?: string; house_number?: string; city?: string; town?: string; village?: string; state?: string; state_code?: string; postcode?: string };
           };
-          const zip = data.address?.postcode?.split("-")[0];
-          const city = data.address?.city ?? data.address?.town ?? data.address?.village;
-          const state = data.address?.state_code ?? data.address?.state;
-          if (zip) {
-            setLocationName([city, state].filter(Boolean).join(", ") || zip);
+          const addr = data.address;
+          if (addr) {
+            const street = [addr.house_number, addr.road].filter(Boolean).join(" ");
+            const city = addr.city ?? addr.town ?? addr.village;
+            const state = addr.state_code ?? addr.state;
+            const zip = addr.postcode?.split("-")[0];
+            const fullAddress = [street, city, state, zip].filter(Boolean).join(", ");
+            const displayName = [city, state].filter(Boolean).join(", ") || fullAddress;
+            setLocationName(displayName);
+            setAddress(fullAddress);
+            localStorage.setItem("grovr_address", fullAddress);
             // Directly fetch stores without debounce — this is a one-time auto-detect
-            setZip(zip);
             setStoresLoading(true);
             try {
-              const updated = await fetchStores(zip, radius);
+              const updated = await fetchStores(fullAddress, radius);
               setStores(updated);
-              setHadZip(true);
+              setHadAddress(true);
             } catch {
               // non-fatal
             } finally {
@@ -179,40 +204,41 @@ export default function Dashboard() {
   }
 
   // ── Store fetch ─────────────────────────────────────────────────────────────
-  const fetchStores = useCallback(async (zipCode: string, radiusInMiles: number): Promise<Retailer[]> => {
-    const res = await fetch(`/api/stores?zip=${encodeURIComponent(zipCode)}&radius=${radiusInMiles}`);
+  const fetchStores = useCallback(async (addr: string, radiusInMiles: number): Promise<Retailer[]> => {
+    const res = await fetch(`/api/stores?address=${encodeURIComponent(addr)}&radius=${radiusInMiles}`);
     if (!res.ok) throw new Error("Failed to fetch stores");
     const data = (await res.json()) as { stores: Retailer[] };
     return data.stores;
   }, []);
 
-  function handleZipChange(value: string) {
-    setZip(value);
+  function handleAddressChange(value: string) {
+    setAddress(value);
+    localStorage.setItem("grovr_address", value);
     setLocationName(null);
-    if (zipDebounceRef.current) clearTimeout(zipDebounceRef.current);
-    if (!/^\d{5}$/.test(value.trim())) return;
-    zipDebounceRef.current = setTimeout(async () => {
+    if (addressDebounceRef.current) clearTimeout(addressDebounceRef.current);
+    if (value.trim().length < 5) return;
+    addressDebounceRef.current = setTimeout(async () => {
       setStoresLoading(true);
       try {
         const updated = await fetchStores(value.trim(), radius);
         setStores(updated);
         setComparisons([]);
-        setHadZip(true);
+        setHadAddress(true);
       } catch {
         // non-fatal
       } finally {
         setStoresLoading(false);
       }
-    }, 500);
+    }, 800);
   }
 
   function handleRadiusChange(value: number) {
     setRadius(value);
-    if (!zip.trim()) return;
+    if (!address.trim()) return;
     if (radiusDebounceRef.current) clearTimeout(radiusDebounceRef.current);
     radiusDebounceRef.current = setTimeout(async () => {
       try {
-        const updated = await fetchStores(zip.trim(), value);
+        const updated = await fetchStores(address.trim(), value);
         setStores(updated);
         setComparisons([]);
       } catch {
@@ -224,12 +250,12 @@ export default function Dashboard() {
   // ── Find prices ─────────────────────────────────────────────────────────────
   async function findPrices() {
     if (items.length === 0) { setPricingError("Add at least one item."); return; }
-    if (!zip.trim()) { setPricingError("Enter your ZIP code first."); return; }
+    if (!address.trim()) { setPricingError("Enter your address first."); return; }
     setPricingError(null);
     setPricingLoading(true);
 
     try {
-      const nearbyStores = stores.length > 0 ? stores : await fetchStores(zip.trim(), radius);
+      const nearbyStores = stores.length > 0 ? stores : await fetchStores(address.trim(), radius);
       if (stores.length === 0) setStores(nearbyStores);
 
       if (nearbyStores.length === 0) {
@@ -315,8 +341,8 @@ export default function Dashboard() {
     brandPrefs,
     setBrandPref,
     setSize,
-    zip,
-    setZip: handleZipChange,
+    address,
+    setAddress: handleAddressChange,
     radius,
     setRadius: handleRadiusChange,
     stores,
@@ -335,7 +361,7 @@ export default function Dashboard() {
     handleAddToCart,
     onNavigate: setScreen,
     isDesktop,
-    hadZip,
+    hadAddress,
   };
 
   return (
