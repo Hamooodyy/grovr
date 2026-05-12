@@ -299,7 +299,7 @@ async function searchAndExtract(
       return null;
     }
 
-    await page.waitForTimeout(2_000);
+    await page.waitForTimeout(500);
 
     return extractProducts(page, originalItemName, size);
   } catch (err) {
