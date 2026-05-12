@@ -4,47 +4,48 @@
  * Source of truth for the 6 supported grocery chains.
  *
  * Pricing strategy:
- *   - All stores are priced by scraping their own websites via Browserless.
- *   - directSearchUrl: template URL for product search ({query} is replaced)
+ *   - All stores are priced via Instacart's store-specific search pages,
+ *     scraped through Browserless (cloud headless browser).
+ *   - instacartSlug: used for instacart.com/store/{slug}/s?k={query}
  *   - storefrontUrl: homepage link shown at checkout ("Shop at X")
  */
 
 export interface StoreConfig {
   displayName: string;
   storefrontUrl: string;
-  directSearchUrl: string;
+  instacartSlug: string;
 }
 
 export const STORE_CONFIGS: Record<string, StoreConfig> = {
   aldi: {
     displayName: "ALDI",
     storefrontUrl: "https://www.aldi.us",
-    directSearchUrl: "https://www.aldi.us/store/aldi/s?k={query}",
+    instacartSlug: "aldi",
   },
   wegmans: {
     displayName: "Wegmans",
     storefrontUrl: "https://www.wegmans.com",
-    directSearchUrl: "https://www.wegmans.com/shop/search?query={query}",
+    instacartSlug: "wegmans",
   },
   target: {
     displayName: "Target",
     storefrontUrl: "https://www.target.com/c/grocery/-/N-5xt1a",
-    directSearchUrl: "https://www.target.com/s?searchTerm={query}",
+    instacartSlug: "target",
   },
   kroger: {
     displayName: "Kroger",
     storefrontUrl: "https://www.kroger.com",
-    directSearchUrl: "https://www.kroger.com/search?query={query}",
+    instacartSlug: "kroger",
   },
   safeway: {
     displayName: "Safeway",
     storefrontUrl: "https://www.safeway.com",
-    directSearchUrl: "https://www.safeway.com/shop/search-results.html?q={query}",
+    instacartSlug: "safeway",
   },
   "food lion": {
     displayName: "Food Lion",
     storefrontUrl: "https://www.foodlion.com",
-    directSearchUrl: "https://www.foodlion.com/product-search/{query}",
+    instacartSlug: "food-lion",
   },
 };
 

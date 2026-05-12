@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { searchProduct } from "@/lib/provider";
+import { searchProducts } from "@/lib/provider";
 import { compareRetailerPrices } from "@/lib/pricing";
 import type { GroceryItem, Retailer } from "@/lib/types";
 
@@ -39,11 +39,11 @@ export async function POST(request: Request) {
   }));
 
   try {
+    // Scrape all items per store in one browser session each.
+    // Stores run in parallel (limited by the concurrency limiter in scraper.ts).
     const retailerMatches = await Promise.all(
       stores.map(async (store) => {
-        const matches = await Promise.all(
-          sanitizedItems.map((item) => searchProduct(item, store))
-        );
+        const matches = await searchProducts(sanitizedItems, store);
         return { retailer: store, items: matches };
       })
     );

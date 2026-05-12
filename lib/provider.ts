@@ -24,6 +24,19 @@ export async function searchProduct(
   return scrapeProduct(item, store);
 }
 
+/**
+ * Scrape all items at a single store in one browser session.
+ * More efficient than calling searchProduct per item — avoids
+ * opening multiple Browserless connections.
+ */
+export async function searchProducts(
+  items: GroceryItem[],
+  store: Retailer
+): Promise<ProductMatch[]> {
+  const { scrapeProducts } = await import("./scraper");
+  return scrapeProducts(items, store);
+}
+
 export async function buildCartUrl(retailer: Retailer): Promise<string> {
   return retailer.storefrontUrl;
 }
