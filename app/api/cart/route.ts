@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { buildCartUrl } from "@/lib/provider";
-import type { Retailer, ProductMatch } from "@/lib/types";
+import type { Retailer } from "@/lib/types";
 
-const USE_SCRAPER = process.env.USE_SCRAPER === "true";
-
-interface ScraperCartBody {
+interface CartRequestBody {
   retailer: Retailer;
-  items: ProductMatch[];
-}
-
-interface KrogerCartBody {
-  items: Array<{ upc: string; quantity: number }>;
 }
 
 export async function POST(request: Request) {
@@ -20,38 +13,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: ScraperCartBody | KrogerCartBody;
+  let body: CartRequestBody;
   try {
-    body = (await request.json()) as ScraperCartBody | KrogerCartBody;
+    body = (await request.json()) as CartRequestBody;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  // Scraper path — return a cart deep link; user completes checkout on retailer site
-  if (USE_SCRAPER) {
-    const { retailer, items } = body as ScraperCartBody;
-    if (!retailer || !Array.isArray(items)) {
-      return NextResponse.json({ error: "retailer and items are required" }, { status: 400 });
-    }
-    const url = await buildCartUrl(retailer, items);
-    return NextResponse.json({ cartUrl: url });
+  const { retailer } = body;
+  if (!retailer) {
+    return NextResponse.json({ error: "retailer is required" }, { status: 400 });
   }
 
-  // Kroger path — original OAuth cart write
-  const { getValidKrogerToken, addToCart } = await import("@/lib/kroger");
-  const { items } = body as KrogerCartBody;
-  if (!Array.isArray(items) || items.length === 0) {
-    return NextResponse.json({ error: "items must be a non-empty array" }, { status: 400 });
-  }
-  try {
-    const userToken = await getValidKrogerToken(userId);
-    await addToCart(userToken, items);
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    if (err instanceof Error && err.message === "KROGER_AUTH_REQUIRED") {
-      return NextResponse.json({ error: "KROGER_AUTH_REQUIRED" }, { status: 401 });
-    }
-    console.error("[api/cart]", err);
-    return NextResponse.json({ error: "Failed to add items to cart" }, { status: 500 });
-  }
+  const url = await buildCartUrl(retailer);
+  return NextResponse.json({ cartUrl: url });
 }

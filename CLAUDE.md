@@ -1,42 +1,48 @@
 # CLAUDE.md - MVP Project Constitution
 
+## ⚠️ Workflow Rule
+**Always present a plan and get explicit user approval before writing or modifying any code.** Do not implement changes until the user says "approved", "go for it", or similar. This applies to all code changes — new files, edits, deletions, refactors.
+
 ## 🎯 Project Goal
-Build a functional MVP for Grovr focusing on pricing analysis and order placement via the Kroger API.
+Build a functional MVP for Grovr — a multi-chain grocery price comparison app.
 **Objective:** Launch quickly, prioritize functionality over perfect code, maintain a simple architecture.
 
 ## 🛒 Core User Flow
 1. User signs up or logs in via Clerk
 2. User builds a grocery list (text input, one item at a time) and enters their ZIP code
-3. App fetches nearby Kroger-family stores (Kroger, Ralphs, Fred Meyer, Harris Teeter, etc.) via the Kroger Locations API
-4. App searches each item at each nearby store via the Kroger Products API and retrieves real-time prices
-5. App computes estimated subtotals per store and surfaces the lowest-cost option to the user
-6. User authorizes Kroger via OAuth and items are added directly to their Kroger cart
-
-> **MVP scope:** Price comparison is limited to Kroger-family stores. Multi-chain comparison (e.g. Kroger vs. Safeway) is out of scope until a second retailer API is integrated.
+3. App fetches nearby stores (ALDI, Wegmans, Target, Kroger, Safeway, Food Lion) via Google Places API
+4. App scrapes each store's website via Browserless to find product prices
+5. App computes estimated subtotals per store and surfaces the lowest-cost option
+6. User clicks through to the cheapest store's homepage to shop
 
 ## 🛠 Tech Stack
 - **Framework:** Next.js 15
 - **Language:** TypeScript (Strict Mode)
 - **Styling:** Tailwind CSS
 - **Authentication:** Clerk (`@clerk/nextjs`) — use pre-built UI components, do not build custom auth forms
-- **Pricing & Retail Data:** Kroger Developer API — official public API, free tier, returns real-time product prices per store location
-- **Cart Handoff:** Kroger Cart API (OAuth `authorization_code` flow) — items land directly in the user's Kroger cart
-- **Maps:** `react-leaflet` + OpenStreetMap tiles — no API key required; used to display nearby stores and the user-selected search radius
+- **Store Discovery:** Google Places API (Nearby Search) — finds supported chains near the user's ZIP
+- **Pricing:** Browserless (cloud headless browser) — scrapes each store's own website for product prices
+- **Product Autocomplete:** Open Food Facts API — free, no API key
 - **Database/Backend:** TBD — do not integrate a database until one is determined necessary for the MVP
-- **Deployment:** Vercel
+- **Deployment:** Railway
+
+## 🏪 Supported Stores
+Six chains for MVP, defined in `lib/store-urls.ts`:
+- ALDI, Wegmans, Target, Kroger, Safeway, Food Lion
+- Each has a `directSearchUrl` template for product search
+- Each has a `storefrontUrl` for the checkout handoff link
 
 ## 💰 Pricing Strategy
-- **Source:** Kroger Products API — real-time prices scoped to a specific store location ID
-- **Promo prices:** API returns both `regular` and `promo` price; always display promo when present
+- **Source:** Browserless scrapes each store's own website (direct search URLs)
 - **What we display:** Item subtotal estimate only — do not imply the total includes delivery fees, service fees, or taxes
-- **Cache TTL:** Cache Kroger product prices for no more than 1 hour
+- **Cache TTL:** Cache product prices for no more than 1 hour
 - **Known gaps and how to handle them:**
   - Prices can shift between lookup and checkout → covered by disclaimer
-  - Item availability can change → Kroger handles substitution at checkout
+  - Item availability can change → store handles substitution at checkout
   - Delivery/service fees not included → make this explicit in UI copy
 
 - **Required disclaimer (display alongside every price):**
-  > "Estimated subtotal based on current Kroger listed prices. Final total including fees and promotions may vary."
+  > "Estimated subtotal based on current listed prices. Final total may vary and does not include delivery fees, service fees, taxes, or promotions applied at checkout."
 
 ## 🔑 Environment Variables
 ```bash
@@ -48,13 +54,14 @@ NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard
 NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
 
-# Kroger
-KROGER_CLIENT_ID=
-KROGER_CLIENT_SECRET=
-KROGER_REDIRECT_URI=http://localhost:3000/api/auth/kroger/callback  # update for prod
+# Google Places
+GOOGLE_PLACES_API_KEY=
+
+# Browserless
+BROWSERLESS_API_KEY=
 ```
 
-> `CLERK_SECRET_KEY`, `KROGER_CLIENT_ID`, and `KROGER_CLIENT_SECRET` must never be exposed client-side. All calls to Kroger go through Next.js API routes. Only `NEXT_PUBLIC_` prefixed variables are safe to use in client components.
+> `CLERK_SECRET_KEY`, `GOOGLE_PLACES_API_KEY`, and `BROWSERLESS_API_KEY` must never be exposed client-side. Only `NEXT_PUBLIC_` prefixed variables are safe to use in client components.
 
 ## 🚀 MVP Scope & Rules
 1. **Do Not Over-engineer:** Keep files small and focused.
@@ -72,24 +79,25 @@ KROGER_REDIRECT_URI=http://localhost:3000/api/auth/kroger/callback  # update for
     /page.tsx                      — Shopping list UI (Clerk-protected)
   /api
     /stores
-      /route.ts                    — Proxy Kroger Locations API (nearby stores by ZIP)
+      /route.ts                    — Google Places nearby store lookup by ZIP
     /pricing
-      /route.ts                    — Kroger Products API lookup per item + store
+      /route.ts                    — Browserless scrape per item + store
     /cart
-      /route.ts                    — Add items to user's Kroger cart (requires user token)
-    /auth
-      /kroger
-        /callback
-          /route.ts                — Kroger OAuth callback — exchange code for user token
+      /route.ts                    — Returns storefront URL for checkout handoff
+    /search
+      /route.ts                    — Open Food Facts product autocomplete
 /lib
-  /kroger.ts                       — Kroger API client (Locations, Products, Cart, OAuth)
+  /google-places.ts                — Google Places API client (store discovery)
+  /scraper.ts                      — Browserless scraper (product pricing)
+  /store-urls.ts                   — Store configs: search URLs, storefront URLs
+  /provider.ts                     — Data source router (API routes import from here)
   /pricing.ts                      — Compare retailer totals, select lowest-cost option
   /types.ts                        — Shared TypeScript types
 /components
-  /ShoppingList.tsx                — List input + item management
-  /StoreMap.tsx                    — react-leaflet map: store pins + radius circle overlay + radius slider
+  /ShoppingList.tsx                — List input + item management + ZIP input
   /ProductMatch.tsx                — Display matched product + price + disclaimer
   /RetailerComparison.tsx          — Show lowest-cost retailer recommendation
+  /CheckoutScreen.tsx              — Checkout handoff with store link
   /PriceDisclaimer.tsx             — Reusable disclaimer shown alongside all prices
 ```
 
@@ -101,155 +109,3 @@ KROGER_REDIRECT_URI=http://localhost:3000/api/auth/kroger/callback  # update for
 - Break down tasks into small, iterative steps.
 - Commit often with descriptive messages.
 - If you are stuck, ask for clarification on the prompt before writing code.
-
----
-
-## 🏗 Implementation Plan
-
-### API Keys — Status & Storage
-
-| Service | Purpose | Status | Where to store |
-|---|---|---|---|
-| **Clerk** | App auth (sign-up, sign-in, session) | ✅ Keys in `.env.local` | `.env.local` (dev) / Vercel env vars (prod) |
-| **Kroger** | Store lookup, product pricing, cart handoff | ✅ Client ID + Secret obtained | `.env.local` → `KROGER_CLIENT_ID` / `KROGER_CLIENT_SECRET` |
-| **Kroger env** | Certification (sandbox) only — base URL is `https://api-ce.kroger.com/v1` | ⚠️ Must swap to `api.kroger.com` for prod | `lib/kroger.ts` → `BASE_URL` |
-
-**Rules:**
-- `CLERK_SECRET_KEY`, `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET` are server-only — never use in client components
-- Only `NEXT_PUBLIC_*` variables are safe client-side
-- All Kroger API calls go through `/app/api/` routes exclusively
-
----
-
-### Phase 0 — Project Scaffold
-**Dependencies:** None
-**Can build now:** Yes
-
-1. Scaffold Next.js 15 app with TypeScript strict mode and Tailwind CSS (`create-next-app`)
-2. Verify `tsconfig.json` has `"strict": true`
-3. Confirm `npm run lint` and `npm run check-types` scripts work
-4. Confirm `.env.local` is in `.gitignore` ✅ (done)
-5. Initial commit
-
----
-
-### Phase 1 — Authentication (Clerk)
-**Dependencies:** Clerk publishable key + secret key ✅ (done)
-**Can build now:** Yes
-
-1. `npm install @clerk/nextjs`
-2. Wrap `app/layout.tsx` in `<ClerkProvider>`
-3. Add Clerk middleware — protect all routes except `/`, `/sign-in`, `/sign-up`
-4. Build landing page (`app/page.tsx`) — use Clerk's `<SignInButton>` / `<SignUpButton>`, no custom auth forms
-5. Create protected dashboard shell (`app/dashboard/page.tsx`) — placeholder only
-6. Smoke test: sign-up → redirect to `/dashboard` → sign-out → back to `/`
-
----
-
-### Phase 2 — Shared Types
-**Dependencies:** None
-**Can build now:** Yes
-
-Create `lib/types.ts` with:
-- `GroceryItem` — `{ id, name, quantity, unit }`
-- `ProductMatch` — `{ item, matchedName, price, retailerId }`
-- `Retailer` — `{ id, name, logoUrl, postalCode, lat, lng }` — coordinates used by StoreMap
-- `PriceComparison` — `{ retailer, subtotal, items: ProductMatch[] }`
-
----
-
-### Phase 3 — Pricing Comparison Logic
-**Dependencies:** `lib/types.ts`
-**Can build now:** Yes
-
-Build `lib/pricing.ts`:
-- Accept a list of items and a set of nearby retailers
-- Sum item prices per retailer using `ProductMatch[]`
-- Return the lowest-cost retailer and per-item breakdown
-- Pure business logic — no API calls, fully testable with mock data
-
----
-
-### Phase 4 — API Client (`lib/kroger.ts`)
-**Dependencies:** `lib/types.ts`
-**Status:** ✅ Done — stubs return mock data, real calls fire when `KROGER_CLIENT_ID` is set
-
-**Functions:**
-- `getNearbyStores(zipCode, radiusInMiles?)` — Kroger Locations API, returns up to 5 nearby stores including `lat`/`lng` from the `geolocation` field
-- `searchProduct(item, locationId)` — Kroger Products API, returns best match + price (promo preferred); cached 1 hour
-- `getKrogerAuthUrl()` — builds OAuth authorization URL for `cart.basic:write`
-- `exchangeCodeForUserToken(code)` — exchanges authorization code for user access token
-- `addToCart(userToken, items)` — `PUT /v1/cart/add` with user's access token
-
-**Auth model:**
-- Locations + Products: `client_credentials` (server-to-server, no user needed)
-- Cart: `authorization_code` (user must authorize via Kroger OAuth)
-
-> **Call volume:** N items × M stores per "Find Prices" action. Cap stores at 5 to control API usage. Kroger free tier allows 10,000 product requests/day.
-
----
-
-### Phase 5 — API Routes
-**Dependencies:** Phase 4 (`lib/kroger.ts`)
-**Can build now:** Yes
-
-- `app/api/stores/route.ts` — accepts `?zip=` and `?radius=` (miles, default 10), calls `getNearbyStores()`, returns store list with coordinates
-- `app/api/pricing/route.ts` — accepts item list + store IDs, calls `searchProduct()` per item/store, returns `PriceComparison[]`
-- `app/api/cart/route.ts` — accepts items + user token, calls `addToCart()`
-- `app/api/auth/kroger/callback/route.ts` — receives OAuth code, calls `exchangeCodeForUserToken()`, stores token in session
-
----
-
-### Phase 6 — UI (3-state Dashboard)
-**Dependencies:** Phase 2 types, Phase 5 API routes
-**Can build now:** Yes — wire directly to live API routes (no mocks needed, keys are set)
-
-**State 1 — List Building** (`components/ShoppingList.tsx`):
-- Text input, add item on Enter
-- Each item row with delete button
-- ZIP code input (stored in local state for the session)
-- Radius slider (5–25 miles, default 10) — controls store search radius; stored in local state
-- "Find Prices" button — triggers store lookup + pricing
-
-**State 1b — Store Map** (`components/StoreMap.tsx`):
-- Rendered after ZIP is entered and stores are fetched (before or alongside pricing)
-- `react-leaflet` map centered on the ZIP code (geocoded via Nominatim/OpenStreetMap — no API key needed)
-- One pin per nearby store; clicking a pin shows the store name
-- Circle overlay centered on the ZIP, radius matches the user-selected slider value
-- Adjusting the radius slider re-fetches stores and updates the map in real time
-- Map is hidden until at least one store is returned
-
-**State 2 — Product Review:**
-- `components/ProductMatch.tsx` — matched product name + price per item
-- `components/RetailerComparison.tsx` — lowest-cost Kroger store highlighted with estimated subtotal
-- `components/PriceDisclaimer.tsx` — rendered alongside every price (required)
-- "Add to Kroger Cart" button — triggers Kroger OAuth if not yet authorized, then calls `/api/cart`
-
-**State 3 — Cart Confirmation:**
-- "Items added to your Kroger cart" message with link to kroger.com to complete checkout
-- Fallback link if redirect did not open automatically
-
-**Map library:** `react-leaflet` v4 + `leaflet` + OpenStreetMap tiles. Requires a dynamic import with `ssr: false` (Leaflet uses `window` and breaks SSR). Leaflet CSS must be imported globally in `app/layout.tsx`.
-
----
-
-### Phase 7 — Live API Integration
-**Dependencies:** `KROGER_CLIENT_ID` + `KROGER_CLIENT_SECRET` in `.env.local`
-**Status:** ✅ Keys obtained — ready to test
-
-1. Add credentials to `.env.local`
-2. Smoke test store lookup with a real ZIP code
-3. Smoke test product search with a 3–5 item list
-4. Test OAuth flow: authorize → callback → add to cart
-5. Confirm prices match what appears on kroger.com for the same store
-
----
-
-### Phase 8 — End-to-End Test & Launch Prep
-**Dependencies:** Phase 7 complete
-
-1. Playwright test: sign-up → add items → find prices → authorize Kroger → items in cart
-2. `npm run lint` and `npm run check-types` — zero errors
-3. Verify price disclaimer appears on every screen that shows a price
-4. Add all env vars to Vercel dashboard (Project Settings → Environment Variables)
-5. Deploy to Vercel — confirm production build passes

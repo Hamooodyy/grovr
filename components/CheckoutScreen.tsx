@@ -8,7 +8,7 @@ interface Props {
   items: GroceryItem[];
   winnerStore: Retailer | null;
   comparisons: PriceComparison[];
-  onNavigate: (screen: "map" | "list" | "compare" | "checkout" | "track") => void;
+  onNavigate: (screen: "list" | "compare" | "checkout" | "track") => void;
   handleAddToCart: (comparison: PriceComparison) => void;
   pricingError: string | null;
   isDesktop: boolean;
@@ -166,11 +166,7 @@ export default function CheckoutScreen({
     </div>
   );
 
-  const instacartSlug = store?.id.split("__")[0].toLowerCase() ?? "";
-  const instacartUrl =
-    instacartSlug === "walmart"
-      ? "https://www.walmart.com"
-      : `https://www.instacart.com/store/${instacartSlug}/storefront`;
+  const storefrontUrl = store?.storefrontUrl ?? "";
 
   const handoffNote = (
     <div
@@ -199,9 +195,9 @@ export default function CheckoutScreen({
         <path d="M12 7v5l3 3" stroke="var(--green)" strokeWidth="2" strokeLinecap="round" />
       </svg>
       <span>
-        You&apos;ll be taken to <strong style={{ color: "var(--text)" }}>{store?.name}</strong>{" "}
-        on {instacartSlug === "walmart" ? "Walmart.com" : "Instacart"}. Use the prices above as a
-        guide while you add items to your cart there.
+        You&apos;ll be taken to{" "}
+        <strong style={{ color: "var(--text)" }}>{store?.name}</strong>. Use
+        the prices above as a guide while you add items to your cart there.
       </span>
     </div>
   );
@@ -210,7 +206,7 @@ export default function CheckoutScreen({
 
   const checkoutBtn = (
     <a
-      href={instacartUrl}
+      href={storefrontUrl}
       target="_blank"
       rel="noopener noreferrer"
       onClick={() => handleAddToCart(winnerComparison)}
@@ -233,7 +229,7 @@ export default function CheckoutScreen({
         boxSizing: "border-box",
       }}
     >
-      Shop on {instacartSlug === "walmart" ? "Walmart" : "Instacart"} →
+      Shop at {store?.name} →
     </a>
   );
 
@@ -315,7 +311,7 @@ export default function CheckoutScreen({
             }}
           >
             We found the best prices for your list. Head to{" "}
-            {instacartSlug === "walmart" ? "Walmart" : "Instacart"} to complete your order.
+            {store?.name} to complete your order.
           </div>
         </div>
 

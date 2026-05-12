@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
 // ---------------------------------------------------------------------------
-// Open Food Facts search v2 — search.openfoodfacts.org
-// More reliable than the legacy CGI endpoint (which 503s regularly).
+// Open Food Facts search — product autocomplete for the shopping list
 // ---------------------------------------------------------------------------
 
 interface OFFHit {
@@ -51,19 +50,6 @@ async function searchOpenFoodFacts(q: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Kroger fallback — fires only when OFF is unavailable
-// ---------------------------------------------------------------------------
-
-async function searchKroger(q: string) {
-  try {
-    const { searchProducts } = await import("@/lib/kroger");
-    return await searchProducts(q, undefined);
-  } catch {
-    return [];
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Route handler
 // ---------------------------------------------------------------------------
 
@@ -80,13 +66,9 @@ export async function GET(request: Request) {
     if (products && products.length > 0) {
       return NextResponse.json({ products });
     }
-    // OFF returned nothing (or is down) — fall back to Kroger
-    const fallback = await searchKroger(q);
-    return NextResponse.json({ products: fallback });
+    return NextResponse.json({ products: [] });
   } catch (err) {
     console.error("[api/search]", err);
-    // Last-resort Kroger fallback
-    const fallback = await searchKroger(q);
-    return NextResponse.json({ products: fallback });
+    return NextResponse.json({ products: [] });
   }
 }

@@ -1,20 +1,14 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import dynamic from "next/dynamic";
 import { UserButton } from "@clerk/nextjs";
 import type { GroceryItem, Retailer, PriceComparison } from "@/lib/types";
 import ShoppingList from "@/components/ShoppingList";
 import RetailerComparison from "@/components/RetailerComparison";
 import CheckoutScreen from "@/components/CheckoutScreen";
 import TrackScreen from "@/components/TrackScreen";
-import InstacartConnect from "@/components/InstacartConnect";
 
-const MapScreen = dynamic(() => import("@/components/MapScreen"), { ssr: false });
-
-const SHOW_INSTACART_CONNECT = false;
-
-type Screen = "map" | "list" | "compare" | "checkout" | "track";
+type Screen = "list" | "compare" | "checkout" | "track";
 
 const NAV: { id: Screen; label: string; icon: (active: boolean) => React.ReactNode }[] = [
   {
@@ -74,12 +68,12 @@ const NAV: { id: Screen; label: string; icon: (active: boolean) => React.ReactNo
 ];
 
 const TITLES: Record<Screen, string> = {
-  map: "Nearby Stores",
   list: "Shopping List",
   compare: "Price Compare",
   checkout: "Checkout",
   track: "Order Tracking",
 };
+
 
 export default function Dashboard() {
   const [screen, setScreen] = useState<Screen>("list");
@@ -100,7 +94,6 @@ export default function Dashboard() {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationName, setLocationName] = useState<string | null>(null);
-  const [userLatLng, setUserLatLng] = useState<[number, number] | null>(null);
   const [hadZip, setHadZip] = useState(false);
 
   const zipDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -127,7 +120,6 @@ export default function Dashboard() {
     setLocationLoading(true);
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
-        setUserLatLng([coords.latitude, coords.longitude]);
         try {
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${coords.latitude}&lon=${coords.longitude}&format=json`,
@@ -196,6 +188,7 @@ export default function Dashboard() {
 
   function handleZipChange(value: string) {
     setZip(value);
+    setLocationName(null);
     if (zipDebounceRef.current) clearTimeout(zipDebounceRef.current);
     if (!/^\d{5}$/.test(value.trim())) return;
     zipDebounceRef.current = setTimeout(async () => {
@@ -240,7 +233,7 @@ export default function Dashboard() {
       if (stores.length === 0) setStores(nearbyStores);
 
       if (nearbyStores.length === 0) {
-        setPricingError("No Kroger stores found near that ZIP. Try increasing the radius.");
+        setPricingError("No supported stores found near that ZIP. Try increasing the radius.");
         return;
       }
 
@@ -267,28 +260,13 @@ export default function Dashboard() {
     }
   }
 
-  // ── Instacart checkout ──────────────────────────────────────────────────────
+  // ── Checkout handoff ────────────────────────────────────────────────────────
   function handleAddToCart(comparison: PriceComparison) {
-    const slug = comparison.retailer.id.split("__")[0].toLowerCase();
-
-    let url: string;
-    if (slug === "walmart") {
-      const params = comparison.items
-        .filter((m) => m.upc && m.price > 0)
-        .map((m) => `items[]=${encodeURIComponent(m.upc!)}`)
-        .join("&");
-      url = params ? `https://www.walmart.com/cart?${params}` : "https://www.walmart.com";
-    } else {
-      url = `https://www.instacart.com/store/${slug}/storefront`;
-    }
-
-    window.open(url, "_blank", "noopener,noreferrer");
+    window.open(comparison.retailer.storefrontUrl, "_blank", "noopener,noreferrer");
     setOrderPlaced(true);
     setWinnerStore(comparison.retailer);
     setScreen("checkout");
   }
-
-  const locationId = stores[0]?.id;
 
   const Logo = () => (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -356,8 +334,6 @@ export default function Dashboard() {
     findPrices,
     handleAddToCart,
     onNavigate: setScreen,
-    locationId,
-    userLatLng,
     isDesktop,
     hadZip,
   };
@@ -455,12 +431,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {SHOW_INSTACART_CONNECT && (
-            <div style={{ marginBottom: 12 }}>
-              <InstacartConnect />
-            </div>
-          )}
-
           <div style={{ marginBottom: 12 }}>
             <UserButton />
           </div>
@@ -549,16 +519,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Instacart connection banner — mobile only */}
-        {SHOW_INSTACART_CONNECT && !isDesktop && (
-          <div style={{ padding: "10px 16px 0", background: "var(--bg)" }}>
-            <InstacartConnect />
-          </div>
-        )}
-
         {/* Screen content */}
         <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-          {screen === "map" && <MapScreen {...screenProps} />}
           {screen === "list" && <ShoppingList {...screenProps} />}
           {screen === "compare" && <RetailerComparison {...screenProps} />}
           {screen === "checkout" && <CheckoutScreen {...screenProps} />}

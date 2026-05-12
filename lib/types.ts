@@ -33,6 +33,7 @@ export interface Retailer {
   name: string;
   logoUrl: string;
   postalCode: string;
+  storefrontUrl: string;
   lat?: number;
   lng?: number;
 }

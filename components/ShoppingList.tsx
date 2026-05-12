@@ -433,11 +433,15 @@ interface Props {
   brandPrefs: Record<string, string>;
   setBrandPref: (id: string, val: string) => void;
   setSize: (id: string, size: ItemSize | undefined) => void;
+  zip: string;
+  setZip: (v: string) => void;
+  storesLoading: boolean;
+  locationName: string | null;
   pricingLoading: boolean;
   pricingError: string | null;
   setPricingError: (e: string | null) => void;
   findPrices: () => void;
-  onNavigate: (screen: "map" | "list" | "compare" | "checkout" | "track") => void;
+  onNavigate: (screen: "list" | "compare" | "checkout" | "track") => void;
   isDesktop: boolean;
 }
 
@@ -449,6 +453,10 @@ export default function ShoppingList({
   brandPrefs,
   setBrandPref,
   setSize,
+  zip,
+  setZip,
+  storesLoading,
+  locationName,
   pricingLoading,
   pricingError,
   setPricingError,
@@ -635,6 +643,36 @@ export default function ShoppingList({
 
           {items.length > 0 && (
             <div style={{ padding: "16px", borderTop: "1px solid var(--border)" }}>
+              {/* ZIP input */}
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
+                  Your ZIP code
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    value={zip}
+                    onChange={(e) => setZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                    placeholder="e.g. 10001"
+                    maxLength={5}
+                    style={{
+                      flex: 1,
+                      padding: "10px 12px",
+                      border: "1.5px solid var(--border)",
+                      borderRadius: 10,
+                      fontFamily: "inherit",
+                      fontSize: 14,
+                      outline: "none",
+                      background: "var(--bg)",
+                    }}
+                  />
+                  {storesLoading && (
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>Finding stores…</span>
+                  )}
+                  {!storesLoading && locationName && (
+                    <span style={{ fontSize: 12, color: "var(--green)" }}>{locationName}</span>
+                  )}
+                </div>
+              </div>
               <button
                 onClick={findPrices}
                 disabled={pricingLoading}
@@ -721,30 +759,31 @@ export default function ShoppingList({
             flexShrink: 0,
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 12,
-            }}
-          >
-            <span style={{ color: "var(--muted)", fontSize: 13 }}>
-              {totalQty} item{totalQty !== 1 ? "s" : ""}
-            </span>
-            <button
-              onClick={() => onNavigate("map")}
+          {/* ZIP input — mobile */}
+          <div style={{ marginBottom: 10 }}>
+            <input
+              value={zip}
+              onChange={(e) => setZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
+              placeholder="Enter your ZIP code"
+              maxLength={5}
               style={{
-                background: "none",
-                border: "none",
-                fontSize: 12,
-                color: "var(--muted)",
-                cursor: "pointer",
-                textDecoration: "underline",
+                width: "100%",
+                padding: "10px 12px",
+                border: "1.5px solid var(--border)",
+                borderRadius: 10,
+                fontFamily: "inherit",
+                fontSize: 14,
+                outline: "none",
+                background: "var(--bg)",
+                boxSizing: "border-box",
               }}
-            >
-              Change store
-            </button>
+            />
+            {storesLoading && (
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>Finding stores…</div>
+            )}
+            {!storesLoading && locationName && (
+              <div style={{ fontSize: 11, color: "var(--green)", marginTop: 4 }}>{locationName}</div>
+            )}
           </div>
           <button
             onClick={findPrices}

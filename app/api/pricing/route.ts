@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { searchProduct } from "@/lib/provider";
 import { compareRetailerPrices } from "@/lib/pricing";
 import type { GroceryItem, Retailer } from "@/lib/types";
@@ -21,14 +20,18 @@ export async function POST(request: Request) {
   const { items, stores } = body;
 
   if (!Array.isArray(items) || items.length === 0) {
-    return NextResponse.json({ error: "items must be a non-empty array" }, { status: 400 });
+    return NextResponse.json(
+      { error: "items must be a non-empty array" },
+      { status: 400 }
+    );
   }
   if (!Array.isArray(stores) || stores.length === 0) {
-    return NextResponse.json({ error: "stores must be a non-empty array" }, { status: 400 });
+    return NextResponse.json(
+      { error: "stores must be a non-empty array" },
+      { status: 400 }
+    );
   }
 
-  // Sanitize names; keep brandPref separate — the scraper handles progressive
-  // fallback internally (branded term → base name → shorter keywords).
   const sanitizedItems = items.map((item) => ({
     ...item,
     name: item.name.trim().slice(0, 80),
@@ -36,13 +39,10 @@ export async function POST(request: Request) {
   }));
 
   try {
-    const { userId } = await auth();
-
-    // Fan out: search every item at every store in parallel
     const retailerMatches = await Promise.all(
       stores.map(async (store) => {
         const matches = await Promise.all(
-          sanitizedItems.map((item) => searchProduct(item, store.id, userId ?? undefined))
+          sanitizedItems.map((item) => searchProduct(item, store))
         );
         return { retailer: store, items: matches };
       })
@@ -52,6 +52,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ comparisons });
   } catch (err) {
     console.error("[api/pricing]", err);
-    return NextResponse.json({ error: "Failed to fetch pricing" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch pricing" },
+      { status: 500 }
+    );
   }
 }

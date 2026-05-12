@@ -6,7 +6,7 @@ import type { GroceryItem, Retailer } from "@/lib/types";
 interface Props {
   items: GroceryItem[];
   winnerStore: Retailer | null;
-  onNavigate: (screen: "map" | "list" | "compare" | "checkout" | "track") => void;
+  onNavigate: (screen: "list" | "compare" | "checkout" | "track") => void;
   isDesktop: boolean;
 }
 
@@ -256,7 +256,7 @@ export default function TrackScreen({ items, winnerStore, onNavigate, isDesktop 
 
             {step >= 4 && (
               <button
-                onClick={() => onNavigate("map")}
+                onClick={() => onNavigate("list")}
                 style={{
                   width: "100%",
                   display: "flex",
@@ -427,7 +427,7 @@ export default function TrackScreen({ items, winnerStore, onNavigate, isDesktop 
           }}
         >
           <button
-            onClick={() => onNavigate("map")}
+            onClick={() => onNavigate("list")}
             style={{
               width: "100%",
               display: "flex",

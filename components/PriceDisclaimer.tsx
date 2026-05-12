@@ -11,9 +11,9 @@ export default function PriceDisclaimer() {
         borderLeft: "2px solid var(--border)",
       }}
     >
-      Estimated subtotal based on current Instacart listed prices. Final total
-      may vary and does not include delivery fees, service fees, taxes, or
-      promotions applied at checkout.
+      Estimated subtotal based on current listed prices. Final total may vary
+      and does not include delivery fees, service fees, taxes, or promotions
+      applied at checkout.
     </p>
   );
 }
