@@ -26,14 +26,18 @@ const geocodeCache = new Map<string, ZipCoords>();
 async function geocodeZip(zip: string): Promise<ZipCoords | null> {
   if (geocodeCache.has(zip)) return geocodeCache.get(zip)!;
   try {
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+    if (!apiKey) return null;
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?postalcode=${zip}&country=US&format=json&limit=1`,
-      { headers: { "User-Agent": "Grovr/1.0 (grocery price comparison app)" } }
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${zip}&components=country:US&key=${apiKey}`
     );
     if (!res.ok) return null;
-    const data = (await res.json()) as Array<{ lat: string; lon: string }>;
-    if (!data.length) return null;
-    const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    const data = (await res.json()) as {
+      results?: Array<{ geometry: { location: { lat: number; lng: number } } }>;
+    };
+    if (!data.results?.length) return null;
+    const loc = data.results[0].geometry.location;
+    const coords = { lat: loc.lat, lng: loc.lng };
     geocodeCache.set(zip, coords);
     return coords;
   } catch {

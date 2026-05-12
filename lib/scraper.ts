@@ -208,8 +208,10 @@ export async function scrapeProducts(
         const item = items[idx];
         const match = await scrapeOneItem(page, item, storeKey, storeConfig.instacartSlug, retailer.id);
         results[idx] = match;
-        const cacheKey = `${retailer.id}:${item.name.toLowerCase().trim()}:${item.brandPref ?? ""}`;
-        PRICE_CACHE.set(cacheKey, { match, expiresAt: Date.now() + PRICE_CACHE_TTL });
+        if (match.price > 0) {
+          const cacheKey = `${retailer.id}:${item.name.toLowerCase().trim()}:${item.brandPref ?? ""}`;
+          PRICE_CACHE.set(cacheKey, { match, expiresAt: Date.now() + PRICE_CACHE_TTL });
+        }
       }
     } finally {
       await page.close().catch(() => {});
