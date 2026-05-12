@@ -6,9 +6,8 @@ import type { GroceryItem, Retailer, PriceComparison } from "@/lib/types";
 import ShoppingList from "@/components/ShoppingList";
 import RetailerComparison from "@/components/RetailerComparison";
 import CheckoutScreen from "@/components/CheckoutScreen";
-import TrackScreen from "@/components/TrackScreen";
 
-type Screen = "list" | "compare" | "checkout" | "track";
+type Screen = "list" | "compare" | "checkout";
 
 const NAV: { id: Screen; label: string; icon: (active: boolean) => React.ReactNode }[] = [
   {
@@ -55,23 +54,12 @@ const NAV: { id: Screen; label: string; icon: (active: boolean) => React.ReactNo
       </svg>
     ),
   },
-  {
-    id: "track",
-    label: "Track",
-    icon: () => (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
-        <path d="M12 7v5l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    ),
-  },
 ];
 
 const TITLES: Record<Screen, string> = {
   list: "Shopping List",
   compare: "Price Compare",
   checkout: "Checkout",
-  track: "Order Tracking",
 };
 
 
@@ -96,7 +84,6 @@ export default function Dashboard() {
   const [pricingError, setPricingError] = useState<string | null>(null);
   const [winnerStore, setWinnerStore] = useState<Retailer | null>(null);
   const [brandPrefs, setBrandPrefsState] = useState<Record<string, string>>({});
-  const [orderPlaced, setOrderPlaced] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationName, setLocationName] = useState<string | null>(null);
   const [hadAddress, setHadAddress] = useState(false);
@@ -289,7 +276,6 @@ export default function Dashboard() {
   // ── Checkout handoff ────────────────────────────────────────────────────────
   function handleAddToCart(comparison: PriceComparison) {
     window.open(comparison.retailer.storefrontUrl, "_blank", "noopener,noreferrer");
-    setOrderPlaced(true);
     setWinnerStore(comparison.retailer);
     setScreen("checkout");
   }
@@ -391,7 +377,7 @@ export default function Dashboard() {
           </div>
 
           <nav style={{ flex: 1 }}>
-            {NAV.filter(({ id }) => id !== "track" || orderPlaced).map(({ id, label, icon }) => {
+            {NAV.map(({ id, label, icon }) => {
               const active = screen === id;
               return (
                 <button
@@ -550,7 +536,6 @@ export default function Dashboard() {
           {screen === "list" && <ShoppingList {...screenProps} />}
           {screen === "compare" && <RetailerComparison {...screenProps} />}
           {screen === "checkout" && <CheckoutScreen {...screenProps} />}
-          {screen === "track" && <TrackScreen {...screenProps} />}
         </div>
 
         {/* Bottom nav — mobile only */}
@@ -563,7 +548,7 @@ export default function Dashboard() {
               flexShrink: 0,
             }}
           >
-            {NAV.filter(({ id }) => id !== "track" || orderPlaced).map(({ id, label, icon }) => {
+            {NAV.map(({ id, label, icon }) => {
               const active = screen === id;
               return (
                 <button

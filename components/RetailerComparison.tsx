@@ -8,7 +8,7 @@ import ErrorBanner from "./ErrorBanner";
 interface Props {
   comparisons: PriceComparison[];
   items: GroceryItem[];
-  onNavigate: (screen: "list" | "compare" | "checkout" | "track") => void;
+  onNavigate: (screen: "list" | "compare" | "checkout") => void;
   setWinnerStore: (store: Retailer) => void;
   pricingError: string | null;
   isDesktop: boolean;

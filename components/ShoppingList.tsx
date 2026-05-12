@@ -440,7 +440,7 @@ interface Props {
   pricingError: string | null;
   setPricingError: (e: string | null) => void;
   findPrices: () => void;
-  onNavigate: (screen: "list" | "compare" | "checkout" | "track") => void;
+  onNavigate: (screen: "list" | "compare" | "checkout") => void;
   isDesktop: boolean;
 }
 

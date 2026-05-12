@@ -8,7 +8,7 @@ interface Props {
   items: GroceryItem[];
   winnerStore: Retailer | null;
   comparisons: PriceComparison[];
-  onNavigate: (screen: "list" | "compare" | "checkout" | "track") => void;
+  onNavigate: (screen: "list" | "compare" | "checkout") => void;
   handleAddToCart: (comparison: PriceComparison) => void;
   pricingError: string | null;
   isDesktop: boolean;
