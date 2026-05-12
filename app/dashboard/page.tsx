@@ -5,9 +5,8 @@ import { UserButton } from "@clerk/nextjs";
 import type { GroceryItem, Retailer, PriceComparison } from "@/lib/types";
 import ShoppingList from "@/components/ShoppingList";
 import RetailerComparison from "@/components/RetailerComparison";
-import CheckoutScreen from "@/components/CheckoutScreen";
 
-type Screen = "list" | "compare" | "checkout";
+type Screen = "list" | "compare";
 
 const NAV: { id: Screen; label: string; icon: (active: boolean) => React.ReactNode }[] = [
   {
@@ -39,27 +38,11 @@ const NAV: { id: Screen; label: string; icon: (active: boolean) => React.ReactNo
       </svg>
     ),
   },
-  {
-    id: "checkout",
-    label: "Checkout",
-    icon: () => (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-        <path
-          d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"
-          stroke="currentColor"
-          strokeWidth="2"
-        />
-        <line x1="3" y1="6" x2="21" y2="6" stroke="currentColor" strokeWidth="2" />
-        <path d="M16 10a4 4 0 01-8 0" stroke="currentColor" strokeWidth="2" />
-      </svg>
-    ),
-  },
 ];
 
 const TITLES: Record<Screen, string> = {
   list: "Shopping List",
   compare: "Price Compare",
-  checkout: "Checkout",
 };
 
 
@@ -273,13 +256,6 @@ export default function Dashboard() {
     }
   }
 
-  // ── Checkout handoff ────────────────────────────────────────────────────────
-  function handleAddToCart(comparison: PriceComparison) {
-    window.open(comparison.retailer.storefrontUrl, "_blank", "noopener,noreferrer");
-    setWinnerStore(comparison.retailer);
-    setScreen("checkout");
-  }
-
   const Logo = () => (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <div
@@ -344,7 +320,6 @@ export default function Dashboard() {
     winnerStore,
     setWinnerStore,
     findPrices,
-    handleAddToCart,
     onNavigate: setScreen,
     isDesktop,
     hadAddress,
@@ -535,7 +510,6 @@ export default function Dashboard() {
         <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
           {screen === "list" && <ShoppingList {...screenProps} />}
           {screen === "compare" && <RetailerComparison {...screenProps} />}
-          {screen === "checkout" && <CheckoutScreen {...screenProps} />}
         </div>
 
         {/* Bottom nav — mobile only */}

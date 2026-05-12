@@ -8,7 +8,7 @@ import ErrorBanner from "./ErrorBanner";
 interface Props {
   comparisons: PriceComparison[];
   items: GroceryItem[];
-  onNavigate: (screen: "list" | "compare" | "checkout") => void;
+  onNavigate: (screen: "list" | "compare") => void;
   setWinnerStore: (store: Retailer) => void;
   pricingError: string | null;
   isDesktop: boolean;
@@ -521,10 +521,7 @@ export default function RetailerComparison({
   const second = comparisons[1];
   const selected = comparisons[selectedIdx];
 
-  function handleOrder() {
-    setWinnerStore(selected.retailer);
-    onNavigate("checkout");
-  }
+  const storefrontUrl = selected.retailer.storefrontUrl ?? "";
 
   const tabBar = (
     <div
@@ -577,9 +574,6 @@ export default function RetailerComparison({
               />
             )}
             {activeTab === "details" && <DetailsTable comparisons={comparisons} items={items} />}
-            <div style={{ marginTop: 16 }}>
-              <PriceDisclaimer />
-            </div>
           </div>
         </div>
 
@@ -597,15 +591,18 @@ export default function RetailerComparison({
         >
           <div style={{ flex: 1, overflowY: "auto", padding: "24px" }}>
             <SelectedCard selected={selected} cheapest={cheapest} second={second} revealed={revealed} />
-            <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6 }}>
+            <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginBottom: 16 }}>
               {selected.retailer.id === cheapest.retailer.id
                 ? `Based on your ${items.length} item${items.length !== 1 ? "s" : ""}, ${cheapest.retailer.name} offers the best total price.`
                 : `You've selected ${selected.retailer.name}. ${cheapest.retailer.name} has the lowest price for your list.`}
             </div>
+            <PriceDisclaimer />
           </div>
           <div style={{ padding: "20px", borderTop: "1px solid var(--border)" }}>
-            <button
-              onClick={handleOrder}
+            <a
+              href={storefrontUrl}
+              target="_blank"
+              rel="noopener noreferrer"
               style={{
                 width: "100%",
                 display: "flex",
@@ -620,10 +617,12 @@ export default function RetailerComparison({
                 border: "none",
                 background: "var(--green)",
                 color: "white",
+                textDecoration: "none",
+                boxSizing: "border-box",
               }}
             >
               Order from {selected.retailer.name} — {fmt(selected.subtotal)}
-            </button>
+            </a>
           </div>
         </div>
       </div>
@@ -657,8 +656,10 @@ export default function RetailerComparison({
           flexShrink: 0,
         }}
       >
-        <button
-          onClick={handleOrder}
+        <a
+          href={storefrontUrl}
+          target="_blank"
+          rel="noopener noreferrer"
           style={{
             width: "100%",
             display: "flex",
@@ -673,10 +674,12 @@ export default function RetailerComparison({
             border: "none",
             background: "var(--green)",
             color: "white",
+            textDecoration: "none",
+            boxSizing: "border-box",
           }}
         >
           Order from {selected.retailer.name} — {fmt(selected.subtotal)}
-        </button>
+        </a>
       </div>
     </div>
   );
