@@ -13,8 +13,10 @@ interface PricingRequestBody {
   phone?: string;
 }
 
-/** Per-store scrape timeout (ms). If a store takes too long, skip it. */
-const STORE_TIMEOUT_MS = 45_000;
+/** Total time budget for all store scraping (ms). Leave headroom before Vercel's 60s kill. */
+const TOTAL_BUDGET_MS = 50_000;
+/** Per-store scrape timeout (ms). */
+const STORE_TIMEOUT_MS = 20_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([
@@ -53,15 +55,23 @@ export async function POST(request: Request) {
     brandPref: item.brandPref?.trim().slice(0, 40) || undefined,
   }));
 
-  // Scrape stores sequentially with per-store timeouts.
+  // Scrape stores sequentially with a total time budget.
   // Most items should be pre-cached via /api/warm-cache.
-  // If a store times out, it's excluded from results rather than failing the entire request.
+  // Stop early if running out of time — return whatever stores completed.
+  const startTime = Date.now();
   const retailerMatches = [];
   for (const store of stores) {
+    const elapsed = Date.now() - startTime;
+    if (elapsed >= TOTAL_BUDGET_MS) {
+      console.warn(`[api/pricing] total budget exhausted after ${elapsed}ms, skipping remaining stores`);
+      break;
+    }
+    const remaining = TOTAL_BUDGET_MS - elapsed;
+    const storeTimeout = Math.min(STORE_TIMEOUT_MS, remaining);
     try {
       const matches = await withTimeout(
         searchProducts(sanitizedItems, store),
-        STORE_TIMEOUT_MS
+        storeTimeout
       );
       if (matches) {
         retailerMatches.push({ retailer: store, items: matches });

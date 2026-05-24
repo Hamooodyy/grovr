@@ -9,8 +9,10 @@ interface WarmCacheRequestBody {
   stores: Retailer[];
 }
 
-/** Per-store scrape timeout (ms). Skip stores that take too long. */
-const STORE_TIMEOUT_MS = 45_000;
+/** Total time budget for all store scraping (ms). Leave headroom before Vercel's 60s kill. */
+const TOTAL_BUDGET_MS = 50_000;
+/** Per-store scrape timeout (ms). */
+const STORE_TIMEOUT_MS = 20_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([
@@ -45,13 +47,21 @@ export async function POST(request: Request) {
     brandPref: item.brandPref?.trim().slice(0, 40) || undefined,
   };
 
-  // Scrape sequentially with per-store timeout — cache whatever succeeds
+  // Scrape sequentially with a total time budget — cache whatever succeeds
+  const startTime = Date.now();
   let cached = 0;
   for (const store of stores) {
+    const elapsed = Date.now() - startTime;
+    if (elapsed >= TOTAL_BUDGET_MS) {
+      console.warn(`[warm-cache] budget exhausted after ${elapsed}ms, cached ${cached}/${stores.length} stores`);
+      break;
+    }
+    const remaining = TOTAL_BUDGET_MS - elapsed;
+    const storeTimeout = Math.min(STORE_TIMEOUT_MS, remaining);
     try {
       const result = await withTimeout(
         searchProducts([sanitizedItem], store),
-        STORE_TIMEOUT_MS
+        storeTimeout
       );
       if (result) cached++;
     } catch {

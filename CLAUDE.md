@@ -101,6 +101,11 @@ BROWSERLESS_API_KEY=
   /PriceDisclaimer.tsx             — Reusable disclaimer shown alongside all prices
 ```
 
+## 🔮 Fast Followers
+Items to revisit when volume/scale demands it:
+- **Parallel store scraping:** Currently scraping stores sequentially to stay within Browserless free plan concurrency limits (1-2 sessions). Upgrade Browserless plan and switch warm-cache + pricing routes back to `Promise.all` for faster cache warming and comparison.
+- **LLM reranker for product matching:** Use a fast/cheap LLM (Haiku, GPT-4o-mini) to pick the best product match from scraper candidates. Currently using heuristic scoring with brand/category penalty lists. LLM would be more accurate and scalable but adds ~200ms latency per item — acceptable once the async SMS flow absorbs wait time.
+
 ## 🧪 Testing & Quality
 - Run `npm run lint` and `npm run check-types` before completing a task.
 - If a task involves core functionality, create a minimal Playwright test.
