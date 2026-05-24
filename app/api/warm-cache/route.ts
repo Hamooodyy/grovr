@@ -35,10 +35,10 @@ export async function POST(request: Request) {
     brandPref: item.brandPref?.trim().slice(0, 40) || undefined,
   };
 
-  // Scrape this item at all stores in parallel — results are cached in KV automatically
-  await Promise.all(
-    stores.map((store) => searchProducts([sanitizedItem], store).catch(() => []))
-  );
+  // Scrape this item at each store sequentially to avoid Browserless rate limits
+  for (const store of stores) {
+    await searchProducts([sanitizedItem], store).catch(() => []);
+  }
 
   return NextResponse.json({ success: true });
 }

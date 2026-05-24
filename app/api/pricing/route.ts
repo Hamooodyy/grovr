@@ -44,13 +44,13 @@ export async function POST(request: Request) {
   }));
 
   try {
-    // Scrape all items per store in one browser session each (stores in parallel).
-    const retailerMatches = await Promise.all(
-      stores.map(async (store) => {
-        const matches = await searchProducts(sanitizedItems, store);
-        return { retailer: store, items: matches };
-      })
-    );
+    // Scrape stores sequentially to avoid Browserless rate limits.
+    // Most items should be pre-cached via /api/warm-cache.
+    const retailerMatches = [];
+    for (const store of stores) {
+      const matches = await searchProducts(sanitizedItems, store);
+      retailerMatches.push({ retailer: store, items: matches });
+    }
 
     const comparisons = compareRetailerPrices(retailerMatches);
 
