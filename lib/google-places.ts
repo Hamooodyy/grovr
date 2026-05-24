@@ -8,12 +8,13 @@
 
 import type { Retailer } from "./types";
 import { matchStoreConfig } from "./store-urls";
+import { kvGet, kvSet, GEO_PREFIX, STORES_PREFIX } from "./kv";
 
 const PLACES_API_URL =
   "https://places.googleapis.com/v1/places:searchNearby";
 
 // ---------------------------------------------------------------------------
-// Address geocoding — Google Geocoding API
+// Address geocoding — Google Geocoding API (cached in Vercel KV, 24hr TTL)
 // ---------------------------------------------------------------------------
 
 interface GeoCoords {
@@ -21,11 +22,11 @@ interface GeoCoords {
   lng: number;
 }
 
-const geocodeCache = new Map<string, GeoCoords>();
-
 async function geocodeAddress(address: string): Promise<GeoCoords | null> {
-  const cacheKey = address.toLowerCase().trim();
-  if (geocodeCache.has(cacheKey)) return geocodeCache.get(cacheKey)!;
+  const key = `${GEO_PREFIX}${address.toLowerCase().trim()}`;
+  const cached = await kvGet<GeoCoords>(key);
+  if (cached) return cached;
+
   try {
     const apiKey = process.env.GOOGLE_PLACES_API_KEY;
     if (!apiKey) return null;
@@ -39,7 +40,7 @@ async function geocodeAddress(address: string): Promise<GeoCoords | null> {
     if (!data.results?.length) return null;
     const loc = data.results[0].geometry.location;
     const coords = { lat: loc.lat, lng: loc.lng };
-    geocodeCache.set(cacheKey, coords);
+    kvSet(key, coords, 86400).catch(() => {}); // 24hr TTL
     return coords;
   } catch {
     return null;
@@ -65,9 +66,6 @@ interface PlacesResponse {
 // Store discovery
 // ---------------------------------------------------------------------------
 
-const STORE_CACHE = new Map<string, { stores: Retailer[]; expiresAt: number }>();
-const STORE_CACHE_TTL = 60 * 60 * 1_000; // 1 hour
-
 function extractPostalCode(address: string): string | null {
   const match = address.match(/\b(\d{5})(?:-\d{4})?\b/);
   return match ? match[1] : null;
@@ -77,9 +75,9 @@ export async function getNearbyGroceryStores(
   address: string,
   radiusInMiles = 10
 ): Promise<Retailer[]> {
-  const cacheKey = `${address.toLowerCase().trim()}:${radiusInMiles}`;
-  const cached = STORE_CACHE.get(cacheKey);
-  if (cached && Date.now() < cached.expiresAt) return cached.stores;
+  const cacheKey = `${STORES_PREFIX}${address.toLowerCase().trim()}:${radiusInMiles}`;
+  const cached = await kvGet<Retailer[]>(cacheKey);
+  if (cached) return cached;
 
   const center = await geocodeAddress(address);
   if (!center) {
@@ -166,6 +164,6 @@ export async function getNearbyGroceryStores(
   }
 
   console.log(`[places] found ${stores.length} stores near "${address}"`);
-  STORE_CACHE.set(cacheKey, { stores, expiresAt: Date.now() + STORE_CACHE_TTL });
+  kvSet(cacheKey, stores, 3600).catch(() => {}); // 1hr TTL
   return stores;
 }

@@ -307,7 +307,7 @@ function ItemDetailCard({ item, comparisons }: { item: GroceryItem; comparisons:
 
   const rows = comparisons.map((c) => {
     const match = c.items.find((m) => m.item.id === item.id);
-    return { retailer: c.retailer, matchedName: match?.matchedName ?? "", price: match?.price ?? 0 };
+    return { retailer: c.retailer, matchedName: match?.matchedName ?? "", matchedSize: match?.matchedSize, price: match?.price ?? 0 };
   });
   const prices = rows.map((r) => r.price).filter((p) => p > 0);
   const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
@@ -395,6 +395,11 @@ function ItemDetailCard({ item, comparisons }: { item: GroceryItem; comparisons:
               <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {isOos ? "Not found" : row.matchedName}
               </div>
+              {!isOos && row.matchedSize && (
+                <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 1, fontWeight: 500 }}>
+                  {row.matchedSize}
+                </div>
+              )}
             </div>
             {isOos ? (
               <span style={{ background: "#fef2f2", color: "#dc2626", fontSize: 10, fontWeight: 700, borderRadius: 6, padding: "3px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>

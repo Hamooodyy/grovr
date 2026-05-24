@@ -23,6 +23,7 @@ export interface ProductSuggestion {
 export interface ProductMatch {
   item: GroceryItem;
   matchedName: string;
+  matchedSize?: string;
   price: number;
   retailerId: string;
   upc?: string;
@@ -42,4 +43,10 @@ export interface PriceComparison {
   retailer: Retailer;
   subtotal: number;
   items: ProductMatch[];
+}
+
+export interface StoredResults {
+  comparisons: PriceComparison[];
+  items: GroceryItem[];
+  createdAt: number;
 }

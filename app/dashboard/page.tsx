@@ -8,6 +8,14 @@ import RetailerComparison from "@/components/RetailerComparison";
 
 type Screen = "list" | "compare";
 
+/** Strip non-digits from a phone string and prepend +1 if 10 digits (US). */
+function formatPhoneE164(raw: string): string | undefined {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return undefined;
+}
+
 const NAV: { id: Screen; label: string; icon: (active: boolean) => React.ReactNode }[] = [
   {
     id: "list",
@@ -70,6 +78,7 @@ export default function Dashboard() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationName, setLocationName] = useState<string | null>(null);
   const [hadAddress, setHadAddress] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState("");
 
   const addressDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const radiusDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,7 +104,12 @@ export default function Dashboard() {
     if (saved && saved.trim().length >= 5) {
       setStoresLoading(true);
       fetchStores(saved.trim(), radius)
-        .then((updated) => { setStores(updated); setHadAddress(true); })
+        .then((updated) => {
+          setStores(updated);
+          setHadAddress(true);
+          // Warm cache for any items already in the list
+          if (updated.length > 0) warmCache(items, updated);
+        })
         .catch(() => {})
         .finally(() => setStoresLoading(false));
     }
@@ -135,6 +149,8 @@ export default function Dashboard() {
               const updated = await fetchStores(fullAddress, radius);
               setStores(updated);
               setHadAddress(true);
+              // Warm cache for any items already in the list
+              if (updated.length > 0) warmCache(items, updated);
             } catch {
               // non-fatal
             } finally {
@@ -153,9 +169,25 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Background cache warming ─────────────────────────────────────────────────
+  function warmCache(itemsToWarm: GroceryItem[], nearbyStores: Retailer[]) {
+    if (nearbyStores.length === 0) return;
+    for (const item of itemsToWarm) {
+      const warmItem = { ...item, brandPref: brandPrefs[item.id] || undefined };
+      fetch("/api/warm-cache", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item: warmItem, stores: nearbyStores }),
+      }).catch(() => {});
+    }
+  }
+
   // ── Item management ─────────────────────────────────────────────────────────
   function addItem(partial: Omit<GroceryItem, "id">) {
-    setItems((prev) => [...prev, { ...partial, id: crypto.randomUUID() }]);
+    const newItem: GroceryItem = { ...partial, id: crypto.randomUUID() };
+    setItems((prev) => [...prev, newItem]);
+    // Warm cache immediately if stores are already known
+    if (stores.length > 0) warmCache([newItem], stores);
   }
   function removeItem(id: string) {
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -168,9 +200,19 @@ export default function Dashboard() {
   }
   function setBrandPref(id: string, val: string) {
     setBrandPrefsState((prev) => ({ ...prev, [id]: val }));
+    // Re-warm cache for this item with the new brand preference
+    const item = items.find((i) => i.id === id);
+    if (item && stores.length > 0) {
+      warmCache([{ ...item, brandPref: val }], stores);
+    }
   }
   function setSize(id: string, size: import("@/lib/types").ItemSize | undefined) {
     setItems((prev) => prev.map((i) => i.id === id ? { ...i, size } : i));
+    // Re-warm cache for this item with the new size
+    const item = items.find((i) => i.id === id);
+    if (item && stores.length > 0) {
+      warmCache([{ ...item, size }], stores);
+    }
   }
 
   // ── Store fetch ─────────────────────────────────────────────────────────────
@@ -194,6 +236,8 @@ export default function Dashboard() {
         setStores(updated);
         setComparisons([]);
         setHadAddress(true);
+        // Warm cache for existing items at newly discovered stores
+        if (updated.length > 0) warmCache(items, updated);
       } catch {
         // non-fatal
       } finally {
@@ -211,6 +255,8 @@ export default function Dashboard() {
         const updated = await fetchStores(address.trim(), value);
         setStores(updated);
         setComparisons([]);
+        // Warm cache for existing items at updated store list
+        if (updated.length > 0) warmCache(items, updated);
       } catch {
         // silently ignore
       }
@@ -239,10 +285,13 @@ export default function Dashboard() {
         brandPref: brandPrefs[item.id] || undefined,
       }));
 
+      // Format phone to E.164 if provided
+      const formattedPhone = phoneNumber ? formatPhoneE164(phoneNumber) : undefined;
+
       const pricingRes = await fetch("/api/pricing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: itemsWithPrefs, stores: nearbyStores }),
+        body: JSON.stringify({ items: itemsWithPrefs, stores: nearbyStores, phone: formattedPhone }),
       });
       if (!pricingRes.ok) throw new Error("Failed to fetch pricing");
 
@@ -323,6 +372,8 @@ export default function Dashboard() {
     onNavigate: setScreen,
     isDesktop,
     hadAddress,
+    phoneNumber,
+    setPhoneNumber,
   };
 
   return (

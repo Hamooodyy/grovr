@@ -442,6 +442,8 @@ interface Props {
   findPrices: () => void;
   onNavigate: (screen: "list" | "compare") => void;
   isDesktop: boolean;
+  phoneNumber?: string;
+  setPhoneNumber?: (v: string) => void;
 }
 
 export default function ShoppingList({
@@ -462,6 +464,8 @@ export default function ShoppingList({
   findPrices,
   onNavigate,
   isDesktop,
+  phoneNumber,
+  setPhoneNumber,
 }: Props) {
   const [query, setQuery] = useState("");
   const [expandedPref, setExpandedPref] = useState<string | null>(null);
@@ -670,6 +674,37 @@ export default function ShoppingList({
                   <div style={{ fontSize: 12, color: "var(--green)", marginTop: 4 }}>{locationName}</div>
                 )}
               </div>
+              {/* Phone input (optional) */}
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>
+                  Text me results (optional)
+                </label>
+                <input
+                  value={phoneNumber ?? ""}
+                  onChange={(e) => setPhoneNumber?.(e.target.value)}
+                  placeholder="(555) 123-4567"
+                  type="tel"
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    border: "1.5px solid var(--border)",
+                    borderRadius: 10,
+                    fontFamily: "inherit",
+                    fontSize: 14,
+                    outline: "none",
+                    background: "var(--bg)",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              {/* Loading messaging */}
+              {pricingLoading && phoneNumber && (
+                <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "10px 14px", marginBottom: 10, fontSize: 12, color: "#15803d", lineHeight: 1.5 }}>
+                  Comparing prices — this may take a few minutes. Feel free to step away. We&apos;ll text your results to {phoneNumber} when they&apos;re ready.
+                </div>
+              )}
+
               <button
                 onClick={findPrices}
                 disabled={pricingLoading || !address.trim()}
@@ -692,7 +727,7 @@ export default function ShoppingList({
                   transition: "all 0.15s",
                 }}
               >
-                {pricingLoading ? "Finding prices…" : "Compare prices →"}
+                {pricingLoading ? "Finding prices…" : phoneNumber ? "Compare & text me →" : "Compare prices →"}
               </button>
             </div>
           )}
@@ -781,6 +816,35 @@ export default function ShoppingList({
               <div style={{ fontSize: 11, color: "var(--green)", marginTop: 4 }}>{locationName}</div>
             )}
           </div>
+
+          {/* Phone input — mobile */}
+          <div style={{ marginBottom: 10 }}>
+            <input
+              value={phoneNumber ?? ""}
+              onChange={(e) => setPhoneNumber?.(e.target.value)}
+              placeholder="Text me results (optional)"
+              type="tel"
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                border: "1.5px solid var(--border)",
+                borderRadius: 10,
+                fontFamily: "inherit",
+                fontSize: 14,
+                outline: "none",
+                background: "var(--bg)",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          {/* Loading messaging — mobile */}
+          {pricingLoading && phoneNumber && (
+            <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "10px 14px", marginBottom: 10, fontSize: 12, color: "#15803d", lineHeight: 1.5 }}>
+              Comparing prices — this may take a few minutes. Feel free to step away. We&apos;ll text your results to {phoneNumber} when they&apos;re ready.
+            </div>
+          )}
+
           <button
             onClick={findPrices}
             disabled={pricingLoading || !address.trim()}
@@ -803,7 +867,7 @@ export default function ShoppingList({
               transition: "all 0.15s",
             }}
           >
-            {pricingLoading ? "Finding prices…" : "Compare prices across stores →"}
+            {pricingLoading ? "Finding prices…" : phoneNumber ? "Compare & text me →" : "Compare prices across stores →"}
           </button>
         </div>
       )}

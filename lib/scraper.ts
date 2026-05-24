@@ -11,41 +11,29 @@
  * Store configs (slugs) live in lib/store-urls.ts.
  */
 
-import { chromium } from "playwright";
-import type { Browser, Page } from "playwright";
+import { chromium } from "playwright-core";
+import type { Browser, Page } from "playwright-core";
 import type { GroceryItem, ProductMatch, Retailer, ItemSize } from "./types";
 import { STORE_CONFIGS } from "./store-urls";
+import { kvGet, kvSet, PRICE_PREFIX } from "./kv";
 
 const BROWSERLESS_API_KEY = process.env.BROWSERLESS_API_KEY ?? "";
 
 // ---------------------------------------------------------------------------
-// Price cache
+// Price cache — stored in Vercel KV (Upstash Redis), 1 hour TTL
 // ---------------------------------------------------------------------------
 
-const PRICE_CACHE = new Map<string, { match: ProductMatch; expiresAt: number }>();
-const PRICE_CACHE_TTL = 60 * 60 * 1_000; // 1 hour
+const PRICE_CACHE_TTL = 3600; // seconds
 
-// ---------------------------------------------------------------------------
-// Concurrency limiter — max 2 Browserless sessions at once
-// ---------------------------------------------------------------------------
-
-const MAX_CONCURRENT = 2;
-let activeSessions = 0;
-const sessionQueue: Array<() => void> = [];
-
-async function acquireSession(): Promise<void> {
-  if (activeSessions < MAX_CONCURRENT) {
-    activeSessions++;
-    return;
-  }
-  await new Promise<void>((resolve) => sessionQueue.push(resolve));
-  activeSessions++;
+interface CachedPrice {
+  matchedName: string;
+  matchedSize?: string;
+  price: number;
+  retailerId: string;
 }
 
-function releaseSession(): void {
-  activeSessions--;
-  const next = sessionQueue.shift();
-  if (next) next();
+function priceCacheKey(retailerId: string, itemName: string, brandPref?: string): string {
+  return `${PRICE_PREFIX}${retailerId}:${itemName.toLowerCase().trim()}:${brandPref ?? ""}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +54,26 @@ function extractCount(name: string): number | null {
   const leadingMatch = name.match(/\b(\d+)\s*(?:eggs?|pieces?)\b/i);
   if (leadingMatch) return parseInt(leadingMatch[1], 10);
   return null;
+}
+
+/** Extract a human-readable size string from a product name. */
+function extractSizeLabel(name: string): string | undefined {
+  // Match patterns like "64 fl oz", "1 Gallon", "12 ct", "2 lb", "1.5 L", "500 ml"
+  const patterns = [
+    /\b(\d+(?:\.\d+)?\s*(?:fl[\s-]?)?oz)\b/i,
+    /\b(\d+(?:\.\d+)?\s*(?:gal(?:lon)?s?))\b/i,
+    /\b(\d+(?:\.\d+)?\s*(?:lbs?|pounds?))\b/i,
+    /\b(\d+(?:\.\d+)?\s*(?:kg|kilograms?))\b/i,
+    /\b(\d+(?:\.\d+)?\s*[lL](?:iters?)?)\b/,
+    /\b(\d+(?:\.\d+)?\s*(?:ml|milliliters?))\b/i,
+    /\b(\d+(?:\.\d+)?\s*(?:ct|count|pk|pack))\b/i,
+    /\b(\d+\s*(?:each|ea))\b/i,
+  ];
+  for (const pat of patterns) {
+    const m = name.match(pat);
+    if (m) return m[1].trim();
+  }
+  return undefined;
 }
 
 function sizeScore(productName: string, size?: ItemSize): number {
@@ -90,6 +98,92 @@ function sizeScore(productName: string, size?: ItemSize): number {
   return 0;
 }
 
+// ---------------------------------------------------------------------------
+// Brand & category conflict detection
+// ---------------------------------------------------------------------------
+
+/** Competing brand pairs — if query mentions one side and result mentions the other, penalize. */
+const COMPETING_BRANDS: [string[], string[]][] = [
+  [["coke", "coca-cola", "coca cola"], ["pepsi"]],
+  [["sprite"], ["sierra mist", "starry", "7up", "seven up"]],
+  [["dr pepper", "dr. pepper"], ["mr pibb", "pibb"]],
+  [["fanta"], ["sunkist", "crush"]],
+  [["gatorade"], ["powerade", "bodyarmor"]],
+  [["folgers"], ["maxwell house"]],
+  [["cheerios"], ["chex"]],
+  [["oreo"], ["hydrox", "chips ahoy"]],
+  [["tide"], ["gain", "all", "persil"]],
+  [["bounty"], ["brawny", "viva"]],
+  [["charmin"], ["cottonelle", "angel soft", "scott"]],
+  [["doritos"], ["pringles", "lays", "ruffles"]],
+  [["budweiser", "bud light"], ["miller", "coors"]],
+  [["tylenol"], ["advil", "motrin"]],
+];
+
+/** Category-conflicting word pairs — "coffee beans" should not match "coffee drinks". */
+const CATEGORY_CONFLICTS: [string, string][] = [
+  ["beans", "drinks"],
+  ["beans", "drink"],
+  ["beans", "pods"],
+  ["beans", "k-cup"],
+  ["beans", "capsules"],
+  ["ground", "pods"],
+  ["ground", "k-cup"],
+  ["whole", "skim"],
+  ["whole", "nonfat"],
+  ["regular", "diet"],
+  ["sugar", "sugar-free"],
+  ["caffeinated", "decaf"],
+  ["sparkling", "still"],
+  ["frozen", "fresh"],
+  ["canned", "fresh"],
+  ["creamy", "crunchy"],
+  ["smooth", "chunky"],
+  ["white", "wheat"],
+  ["original", "vanilla"],
+];
+
+/** Words too generic to serve as distinguishing identifiers. */
+const STOP_WORDS = new Set([
+  "zero", "free", "low", "lite", "light", "large", "small", "medium",
+  "big", "mini", "new", "original", "classic", "style", "flavored",
+  "flavor", "pack", "size", "value", "organic", "natural", "brand",
+  "the", "and", "with", "for", "from",
+]);
+
+function normalizeWords(s: string): string[] {
+  return s.toLowerCase().replace(/[^a-z0-9\s-]/g, "").split(/\s+/).filter((w) => w.length > 1);
+}
+
+function hasCompetingBrand(queryWords: string[], resultWords: string[]): boolean {
+  const qText = queryWords.join(" ");
+  const rText = resultWords.join(" ");
+  for (const [sideA, sideB] of COMPETING_BRANDS) {
+    const qInA = sideA.some((b) => qText.includes(b));
+    const qInB = sideB.some((b) => qText.includes(b));
+    if (qInA && sideB.some((b) => rText.includes(b))) return true;
+    if (qInB && sideA.some((b) => rText.includes(b))) return true;
+  }
+  return false;
+}
+
+function hasCategoryConflict(queryWords: string[], resultWords: string[]): boolean {
+  for (const [a, b] of CATEGORY_CONFLICTS) {
+    if (queryWords.includes(a) && resultWords.includes(b)) return true;
+    if (queryWords.includes(b) && resultWords.includes(a)) return true;
+  }
+  return false;
+}
+
+/**
+ * Identify the most distinctive words in the query — skip stop words and
+ * very short words. If the result doesn't contain ANY of these, it's likely
+ * a bad match.
+ */
+function getMustMatchWords(queryWords: string[]): string[] {
+  return queryWords.filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+}
+
 /**
  * Word-overlap similarity that penalizes extra unmatched words.
  *
@@ -105,6 +199,40 @@ function wordSimilarity(a: string, b: string): number {
   if (wordsA.size === 0 || wordsB.size === 0) return 0;
   const intersection = [...wordsA].filter((w) => wordsB.has(w)).length;
   return intersection / Math.max(wordsA.size, wordsB.size);
+}
+
+/** Minimum score a product must reach to be considered a valid match. */
+const MIN_MATCH_SCORE = 0.3;
+
+/**
+ * Full relevance score combining word similarity, size preference,
+ * brand conflicts, category conflicts, and must-match coverage.
+ */
+function relevanceScore(
+  queryName: string,
+  candidateName: string,
+  size?: ItemSize
+): number {
+  const qWords = normalizeWords(queryName);
+  const rWords = normalizeWords(candidateName);
+
+  let score = wordSimilarity(queryName, candidateName) + sizeScore(candidateName, size);
+
+  // Competing brand → heavy penalty
+  if (hasCompetingBrand(qWords, rWords)) score -= 2;
+
+  // Category conflict → moderate penalty
+  if (hasCategoryConflict(qWords, rWords)) score -= 1.5;
+
+  // Must-match words: if none of the distinctive query words appear in the result, penalize
+  const mustMatch = getMustMatchWords(qWords);
+  if (mustMatch.length > 0) {
+    const rSet = new Set(rWords);
+    const matched = mustMatch.filter((w) => rSet.has(w)).length;
+    if (matched === 0) score -= 1;
+  }
+
+  return score;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,15 +276,12 @@ export async function scrapeProduct(
   item: GroceryItem,
   retailer: Retailer
 ): Promise<ProductMatch> {
-  const cacheKey = `${retailer.id}:${item.name.toLowerCase().trim()}:${item.brandPref ?? ""}`;
-  const cached = PRICE_CACHE.get(cacheKey);
-  if (cached && Date.now() < cached.expiresAt) return cached.match;
+  const key = priceCacheKey(retailer.id, item.name, item.brandPref);
+  const cached = await kvGet<CachedPrice>(key);
+  if (cached) return { item, ...cached };
 
-  // Single-item call — opens its own browser session
   const results = await scrapeProducts([item], retailer);
-  const match = results[0];
-  PRICE_CACHE.set(cacheKey, { match, expiresAt: Date.now() + PRICE_CACHE_TTL });
-  return match;
+  return results[0];
 }
 
 /**
@@ -179,12 +304,14 @@ export async function scrapeProducts(
     }));
   }
 
-  // Check cache for all items — only scrape the uncached ones
-  const results: (ProductMatch | null)[] = items.map((item) => {
-    const cacheKey = `${retailer.id}:${item.name.toLowerCase().trim()}:${item.brandPref ?? ""}`;
-    const cached = PRICE_CACHE.get(cacheKey);
-    return cached && Date.now() < cached.expiresAt ? cached.match : null;
-  });
+  // Check KV cache for all items — only scrape the uncached ones
+  const cacheChecks = await Promise.all(
+    items.map((item) => kvGet<CachedPrice>(priceCacheKey(retailer.id, item.name, item.brandPref)))
+  );
+
+  const results: (ProductMatch | null)[] = cacheChecks.map((cached, i) =>
+    cached ? { item: items[i], ...cached } : null
+  );
 
   const uncachedIndices = results
     .map((r, i) => (r === null ? i : -1))
@@ -193,7 +320,6 @@ export async function scrapeProducts(
   if (uncachedIndices.length === 0) return results as ProductMatch[];
 
   // One browser session for all uncached items at this store
-  await acquireSession();
   let browser: Browser | null = null;
 
   try {
@@ -209,8 +335,14 @@ export async function scrapeProducts(
         const match = await scrapeOneItem(page, item, storeKey, storeConfig.instacartSlug, retailer.id);
         results[idx] = match;
         if (match.price > 0) {
-          const cacheKey = `${retailer.id}:${item.name.toLowerCase().trim()}:${item.brandPref ?? ""}`;
-          PRICE_CACHE.set(cacheKey, { match, expiresAt: Date.now() + PRICE_CACHE_TTL });
+          const key = priceCacheKey(retailer.id, item.name, item.brandPref);
+          const cached: CachedPrice = {
+            matchedName: match.matchedName,
+            matchedSize: match.matchedSize,
+            price: match.price,
+            retailerId: match.retailerId,
+          };
+          kvSet(key, cached, PRICE_CACHE_TTL).catch(() => {});
         }
       }
     } finally {
@@ -218,7 +350,6 @@ export async function scrapeProducts(
     }
   } catch (err) {
     console.error(`[scraper] Browserless error for ${storeKey}:`, err);
-    // Fill any remaining nulls with no-match
     for (const idx of uncachedIndices) {
       if (results[idx] === null) {
         results[idx] = {
@@ -228,7 +359,6 @@ export async function scrapeProducts(
     }
   } finally {
     if (browser) await browser.close().catch(() => {});
-    releaseSession();
   }
 
   return results as ProductMatch[];
@@ -263,6 +393,7 @@ async function scrapeOneItem(
       return {
         item,
         matchedName: result.matchedName,
+        matchedSize: result.matchedSize,
         price: result.price,
         retailerId,
       };
@@ -284,7 +415,7 @@ async function searchAndExtract(
   url: string,
   originalItemName: string,
   size?: ItemSize
-): Promise<{ matchedName: string; price: number } | null> {
+): Promise<{ matchedName: string; matchedSize?: string; price: number } | null> {
   try {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
 
@@ -314,7 +445,7 @@ async function extractProducts(
   page: Page,
   originalItemName: string,
   size?: ItemSize
-): Promise<{ matchedName: string; price: number } | null> {
+): Promise<{ matchedName: string; matchedSize?: string; price: number } | null> {
   const products = await page.evaluate(() => {
     const priceRegex = /\$(\d+\.\d{2})/;
     const results: { name: string; price: number }[] = [];
@@ -359,14 +490,24 @@ async function extractProducts(
   console.log(`[scraper] DOM found ${products.length} products`);
   if (products.length === 0) return null;
 
-  const best = products.reduce((a, b) => {
-    const scoreA =
-      wordSimilarity(originalItemName, a.name) + sizeScore(a.name, size);
-    const scoreB =
-      wordSimilarity(originalItemName, b.name) + sizeScore(b.name, size);
-    return scoreB > scoreA ? b : a;
-  });
+  // Score all candidates and pick the best one above the minimum threshold
+  let bestProduct: { name: string; price: number } | null = null;
+  let bestScore = -Infinity;
 
-  console.log(`[scraper] best match: "${best.name}" $${best.price}`);
-  return { matchedName: best.name, price: best.price };
+  for (const p of products) {
+    const score = relevanceScore(originalItemName, p.name, size);
+    if (score > bestScore) {
+      bestScore = score;
+      bestProduct = p;
+    }
+  }
+
+  if (!bestProduct || bestScore < MIN_MATCH_SCORE) {
+    console.log(`[scraper] no match above threshold (best score: ${bestScore.toFixed(2)})`);
+    return null;
+  }
+
+  const matchedSize = extractSizeLabel(bestProduct.name);
+  console.log(`[scraper] best match: "${bestProduct.name}" $${bestProduct.price} (score=${bestScore.toFixed(2)}, size=${matchedSize ?? "n/a"})`);
+  return { matchedName: bestProduct.name, matchedSize, price: bestProduct.price };
 }
