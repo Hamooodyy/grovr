@@ -169,7 +169,9 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Background cache warming ─────────────────────────────────────────────────
+  // ── Background cache warming (debounced per item) ────────────────────────────
+  const warmTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
   function warmCache(itemsToWarm: GroceryItem[], nearbyStores: Retailer[]) {
     if (nearbyStores.length === 0) return;
     for (const item of itemsToWarm) {
@@ -182,14 +184,35 @@ export default function Dashboard() {
     }
   }
 
+  /** Debounced warm-cache: waits 3s before firing, cancels if item is removed or changed. */
+  function warmCacheDebounced(itemsToWarm: GroceryItem[], nearbyStores: Retailer[]) {
+    if (nearbyStores.length === 0) return;
+    for (const item of itemsToWarm) {
+      // Cancel any pending warm for this item
+      if (warmTimers.current[item.id]) clearTimeout(warmTimers.current[item.id]);
+      warmTimers.current[item.id] = setTimeout(() => {
+        delete warmTimers.current[item.id];
+        warmCache([item], nearbyStores);
+      }, 3000);
+    }
+  }
+
+  function cancelWarmCache(id: string) {
+    if (warmTimers.current[id]) {
+      clearTimeout(warmTimers.current[id]);
+      delete warmTimers.current[id];
+    }
+  }
+
   // ── Item management ─────────────────────────────────────────────────────────
   function addItem(partial: Omit<GroceryItem, "id">) {
     const newItem: GroceryItem = { ...partial, id: crypto.randomUUID() };
     setItems((prev) => [...prev, newItem]);
-    // Warm cache immediately if stores are already known
-    if (stores.length > 0) warmCache([newItem], stores);
+    // Debounced warm cache — gives user 3s to correct typos or delete
+    if (stores.length > 0) warmCacheDebounced([newItem], stores);
   }
   function removeItem(id: string) {
+    cancelWarmCache(id);
     setItems((prev) => prev.filter((i) => i.id !== id));
     setBrandPrefsState((prev) => { const next = { ...prev }; delete next[id]; return next; });
   }
@@ -200,18 +223,18 @@ export default function Dashboard() {
   }
   function setBrandPref(id: string, val: string) {
     setBrandPrefsState((prev) => ({ ...prev, [id]: val }));
-    // Re-warm cache for this item with the new brand preference
+    // Debounced re-warm with new brand preference
     const item = items.find((i) => i.id === id);
     if (item && stores.length > 0) {
-      warmCache([{ ...item, brandPref: val }], stores);
+      warmCacheDebounced([{ ...item, brandPref: val }], stores);
     }
   }
   function setSize(id: string, size: import("@/lib/types").ItemSize | undefined) {
     setItems((prev) => prev.map((i) => i.id === id ? { ...i, size } : i));
-    // Re-warm cache for this item with the new size
+    // Debounced re-warm with new size
     const item = items.find((i) => i.id === id);
     if (item && stores.length > 0) {
-      warmCache([{ ...item, size }], stores);
+      warmCacheDebounced([{ ...item, size }], stores);
     }
   }
 
