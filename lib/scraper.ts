@@ -185,11 +185,11 @@ function getMustMatchWords(queryWords: string[]): string[] {
 }
 
 /**
- * Word-overlap similarity that penalizes extra unmatched words.
+ * Word-overlap similarity.
  *
- * Uses the max of the two word-set sizes as the denominator so that
- * "milk" vs "almond milk" = 1/2 = 0.5, while "milk" vs "whole milk" = 1/2 = 0.5
- * but "whole milk" vs "whole milk 2%" = 2/3 = 0.67 — closer matches score higher.
+ * For short queries (1-2 words), uses the query size as denominator so that
+ * "eggs" matching within "Large White Eggs 12 Count" scores 1.0, not 0.17.
+ * For longer queries, uses the max of the two word sets to penalize mismatches.
  */
 function wordSimilarity(a: string, b: string): number {
   const normalize = (s: string) =>
@@ -198,11 +198,14 @@ function wordSimilarity(a: string, b: string): number {
   const wordsB = new Set(normalize(b));
   if (wordsA.size === 0 || wordsB.size === 0) return 0;
   const intersection = [...wordsA].filter((w) => wordsB.has(w)).length;
-  return intersection / Math.max(wordsA.size, wordsB.size);
+  // Short queries: measure how much of the query was found (recall-oriented)
+  // Longer queries: penalize extra unmatched words in either direction
+  const denominator = wordsA.size <= 2 ? wordsA.size : Math.max(wordsA.size, wordsB.size);
+  return intersection / denominator;
 }
 
 /** Minimum score a product must reach to be considered a valid match. */
-const MIN_MATCH_SCORE = 0.3;
+const MIN_MATCH_SCORE = 0.1;
 
 /**
  * Full relevance score combining word similarity, size preference,
