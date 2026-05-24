@@ -110,14 +110,7 @@ const COMPETING_BRANDS: [string[], string[]][] = [
   [["fanta"], ["sunkist", "crush"]],
   [["gatorade"], ["powerade", "bodyarmor"]],
   [["folgers"], ["maxwell house"]],
-  [["cheerios"], ["chex"]],
-  [["oreo"], ["hydrox", "chips ahoy"]],
-  [["tide"], ["gain", "all", "persil"]],
-  [["bounty"], ["brawny", "viva"]],
-  [["charmin"], ["cottonelle", "angel soft", "scott"]],
-  [["doritos"], ["pringles", "lays", "ruffles"]],
   [["budweiser", "bud light"], ["miller", "coors"]],
-  [["tylenol"], ["advil", "motrin"]],
 ];
 
 /** Category-conflicting word pairs — "coffee beans" should not match "coffee drinks". */
