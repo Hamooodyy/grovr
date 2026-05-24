@@ -238,37 +238,12 @@ export default function LandingPage() {
               zIndex: 1,
             }}
           >
-            Stop overpaying for groceries. Meet{" "}
-            <em
-              style={{
-                fontStyle: "normal",
-                color: "var(--green)",
-                position: "relative",
-              }}
-            >
-              Grovr
-            </em>
-            .
+            Stop overpaying for groceries.
           </h1>
 
-          <p
-            className="lp-anim-2"
-            style={{
-              fontSize: "clamp(16px, 2vw, 20px)",
-              color: "var(--muted)",
-              maxWidth: 640,
-              lineHeight: 1.6,
-              marginBottom: 40,
-              position: "relative",
-              zIndex: 1,
-              fontWeight: 400,
-            }}
-          >
-            Grovr finds the best price for your cart so you don&apos;t have to.
-          </p>
 
           <div
-            className="lp-anim-3"
+            className="lp-anim-2"
             style={{
               display: "flex",
               alignItems: "center",
@@ -277,6 +252,7 @@ export default function LandingPage() {
               justifyContent: "center",
               position: "relative",
               zIndex: 1,
+              marginTop: 40,
             }}
           >
             <SignUpButton mode="redirect">
@@ -384,17 +360,17 @@ export default function LandingPage() {
             <StepCard
               index="01"
               title="Build your list"
-              desc="Search for any item and add it to your list. Have a brand you love? Just note it — we'll prioritize it when matching products."
+              desc="Search for any item and add it to your list. Prefer a specific brand? Just note it and we'll match accordingly."
             />
             <StepCard
               index="02"
               title="We find the best deal"
-              desc="Grovr scans every grocery store within your radius, matches each item to the closest product, and tallies the total — instantly."
+              desc="We check every grocery store near you, match each item to the closest product, and tally your total."
             />
             <StepCard
               index="03"
               title="Order with one tap"
-              desc="We hand you off to the winning store's online storefront. Fill your cart, place your order, and rest easy knowing you got the best price."
+              desc="We send you to the cheapest store's website. Place your order and save."
             />
           </div>
         </section>
@@ -426,8 +402,7 @@ export default function LandingPage() {
                 lineHeight: 1.6,
               }}
             >
-              Grovr is designed to be fast, simple, and genuinely useful — no
-              bloat, no subscriptions.
+              Fast, simple, and actually useful. No bloat, no subscriptions.
             </p>
             <div
               className="lp-features-grid"
@@ -494,7 +469,7 @@ export default function LandingPage() {
                 Grovr
               </div>
               <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>
-                Saving you money on groceries, with none of the hassle.
+                Spend less on groceries.
               </div>
             </div>
           </div>
