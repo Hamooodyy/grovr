@@ -9,10 +9,20 @@ interface WarmCacheRequestBody {
   stores: Retailer[];
 }
 
+/** Per-store scrape timeout (ms). Skip stores that take too long. */
+const STORE_TIMEOUT_MS = 45_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 /**
  * Scrapes a single item across all provided stores, populating the KV cache.
  * Called fire-and-forget from the client as users build their list.
- * The cached results are later read by /api/pricing when the user compares.
+ * Stores that timeout or fail are skipped — whatever gets cached is useful.
  */
 export async function POST(request: Request) {
   let body: WarmCacheRequestBody;
@@ -35,10 +45,19 @@ export async function POST(request: Request) {
     brandPref: item.brandPref?.trim().slice(0, 40) || undefined,
   };
 
-  // Scrape this item at each store sequentially to avoid Browserless rate limits
+  // Scrape sequentially with per-store timeout — cache whatever succeeds
+  let cached = 0;
   for (const store of stores) {
-    await searchProducts([sanitizedItem], store).catch(() => []);
+    try {
+      const result = await withTimeout(
+        searchProducts([sanitizedItem], store),
+        STORE_TIMEOUT_MS
+      );
+      if (result) cached++;
+    } catch {
+      // skip this store, continue with next
+    }
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, storesCached: cached });
 }
