@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useAuth } from "@clerk/nextjs";
 import type { GroceryItem, Retailer, PriceComparison } from "@/lib/types";
 import ShoppingList from "@/components/ShoppingList";
 import RetailerComparison from "@/components/RetailerComparison";
@@ -80,8 +80,11 @@ export default function Dashboard() {
   const [hadAddress, setHadAddress] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
 
+  const { userId } = useAuth();
   const addressDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const radiusDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listLoadedRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const check = () => setIsDesktop(window.innerWidth >= 900);
@@ -97,6 +100,52 @@ export default function Dashboard() {
       if (radiusDebounceRef.current) clearTimeout(radiusDebounceRef.current);
     };
   }, []);
+
+  // ── Load shopping list from Postgres on mount ────────────────────────────────
+  useEffect(() => {
+    if (!userId || listLoadedRef.current) return;
+    listLoadedRef.current = true;
+    fetch("/api/shopping-list")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { items?: GroceryItem[]; address?: string; radius?: number } | null) => {
+        if (!data) return;
+        if (data.items && data.items.length > 0) {
+          setItems(data.items);
+          const prefs: Record<string, string> = {};
+          for (const item of data.items) {
+            if (item.brandPref) prefs[item.id] = item.brandPref;
+          }
+          if (Object.keys(prefs).length > 0) setBrandPrefsState(prefs);
+        }
+        if (data.address) {
+          setAddress(data.address);
+          localStorage.setItem("grovr_address", data.address);
+        }
+        if (data.radius) setRadius(data.radius);
+      })
+      .catch(() => {});
+  }, [userId]);
+
+  // ── Auto-save shopping list to Postgres (debounced 2s) ──────────────────────
+  useEffect(() => {
+    if (!userId || !listLoadedRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      // Merge brand prefs into items before saving
+      const itemsWithPrefs = items.map((item) => ({
+        ...item,
+        brandPref: brandPrefs[item.id] || undefined,
+      }));
+      fetch("/api/shopping-list", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: itemsWithPrefs, address, radius }),
+      }).catch(() => {});
+    }, 2000);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [userId, items, brandPrefs, address, radius]);
 
   // ── Restore saved address on mount ───────────────────────────────────────────
   useEffect(() => {

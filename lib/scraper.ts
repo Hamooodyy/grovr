@@ -16,6 +16,7 @@ import type { Browser, Page } from "playwright-core";
 import type { GroceryItem, ProductMatch, Retailer, ItemSize } from "./types";
 import { STORE_CONFIGS } from "./store-urls";
 import { kvGet, kvSet, PRICE_PREFIX } from "./kv";
+import { getPrice, writePrice } from "./db/price-cache";
 
 const BROWSERLESS_API_KEY = process.env.BROWSERLESS_API_KEY ?? "";
 
@@ -265,22 +266,6 @@ function buildSearchTerms(name: string, brandPref?: string): string[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Scrape a single item at a single retailer.
- * Called per-item from the pricing route. Results are cached for 1 hour.
- */
-export async function scrapeProduct(
-  item: GroceryItem,
-  retailer: Retailer
-): Promise<ProductMatch> {
-  const key = priceCacheKey(retailer.id, item.name, item.brandPref);
-  const cached = await kvGet<CachedPrice>(key);
-  if (cached) return { item, ...cached };
-
-  const results = await scrapeProducts([item], retailer);
-  return results[0];
-}
-
-/**
  * Scrape multiple items at a single retailer in one browser session.
  * One Browserless connection is reused across all items, avoiding
  * rate limits from opening many parallel connections.
@@ -309,9 +294,43 @@ export async function scrapeProducts(
     cached ? { item: items[i], ...cached } : null
   );
 
-  const uncachedIndices = results
+  let uncachedIndices = results
     .map((r, i) => (r === null ? i : -1))
     .filter((i) => i >= 0);
+
+  // --- L2: Check Postgres for items not found in KV ---
+  if (uncachedIndices.length > 0) {
+    const pgChecks = await Promise.all(
+      uncachedIndices.map((idx) =>
+        getPrice(retailer.id, items[idx].name, items[idx].brandPref)
+      )
+    );
+
+    const stillUncached: number[] = [];
+    for (let j = 0; j < uncachedIndices.length; j++) {
+      const idx = uncachedIndices[j];
+      const pg = pgChecks[j];
+      if (!pg) {
+        stillUncached.push(idx);
+        continue;
+      }
+      if (pg.ageHours < 24) {
+        // Fresh enough — serve from Postgres, backfill KV
+        results[idx] = { item: items[idx], ...pg.cached };
+        kvSet(
+          priceCacheKey(retailer.id, items[idx].name, items[idx].brandPref),
+          pg.cached,
+          PRICE_CACHE_TTL
+        ).catch(() => {});
+        // 6-24hr: also queue for re-scrape in the same pass
+        if (pg.ageHours >= 6) stillUncached.push(idx);
+      } else {
+        // > 24hr: too stale, must re-scrape
+        stillUncached.push(idx);
+      }
+    }
+    uncachedIndices = stillUncached;
+  }
 
   if (uncachedIndices.length === 0) return results as ProductMatch[];
 
@@ -339,6 +358,14 @@ export async function scrapeProducts(
             retailerId: match.retailerId,
           };
           kvSet(key, cached, PRICE_CACHE_TTL).catch(() => {});
+          writePrice(
+            retailer.id,
+            item.name,
+            item.brandPref,
+            match.matchedName,
+            match.matchedSize,
+            match.price
+          ).catch(() => {});
         }
       }
     } finally {
@@ -358,10 +385,6 @@ export async function scrapeProducts(
   }
 
   return results as ProductMatch[];
-}
-
-export function buildCartUrl(retailer: Retailer): string {
-  return retailer.storefrontUrl;
 }
 
 // ---------------------------------------------------------------------------

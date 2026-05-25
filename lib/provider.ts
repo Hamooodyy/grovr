@@ -16,14 +16,6 @@ export async function getNearbyStores(
   return getNearbyGroceryStores(address, radiusInMiles);
 }
 
-export async function searchProduct(
-  item: GroceryItem,
-  store: Retailer
-): Promise<ProductMatch> {
-  const { scrapeProduct } = await import("./scraper");
-  return scrapeProduct(item, store);
-}
-
 /**
  * Scrape all items at a single store in one browser session.
  * More efficient than calling searchProduct per item — avoids
@@ -37,6 +29,3 @@ export async function searchProducts(
   return scrapeProducts(items, store);
 }
 
-export async function buildCartUrl(retailer: Retailer): Promise<string> {
-  return retailer.storefrontUrl;
-}

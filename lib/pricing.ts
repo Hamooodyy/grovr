@@ -38,16 +38,3 @@ export function compareRetailerPrices(
   });
 }
 
-/**
- * Returns the lowest-cost retailer. Expects the sorted output of
- * compareRetailerPrices — comparisons[0] is always cheapest.
- */
-export function findCheapestRetailer(
-  comparisons: PriceComparison[]
-): PriceComparison {
-  if (comparisons.length === 0) {
-    throw new Error("No retailer comparisons provided");
-  }
-
-  return comparisons[0];
-}
