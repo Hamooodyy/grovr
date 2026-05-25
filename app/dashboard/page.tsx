@@ -5,8 +5,9 @@ import { UserButton, useAuth } from "@clerk/nextjs";
 import type { GroceryItem, Retailer, PriceComparison } from "@/lib/types";
 import ShoppingList from "@/components/ShoppingList";
 import RetailerComparison from "@/components/RetailerComparison";
+import SavedLists from "@/components/SavedLists";
 
-type Screen = "list" | "compare";
+type Screen = "list" | "compare" | "saved";
 
 /** Strip non-digits from a phone string and prepend +1 if 10 digits (US). */
 function formatPhoneE164(raw: string): string | undefined {
@@ -46,11 +47,27 @@ const NAV: { id: Screen; label: string; icon: (active: boolean) => React.ReactNo
       </svg>
     ),
   },
+  {
+    id: "saved",
+    label: "Saved",
+    icon: () => (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path
+          d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
 ];
 
 const TITLES: Record<Screen, string> = {
   list: "Shopping List",
   compare: "Price Compare",
+  saved: "Saved Lists",
 };
 
 
@@ -379,6 +396,46 @@ export default function Dashboard() {
     }
   }
 
+  // ── Save list with a name ───────────────────────────────────────────────
+  async function handleSaveList() {
+    if (items.length === 0) return;
+    const name = window.prompt("Give this list a name:");
+    if (!name?.trim()) return;
+
+    const itemsWithPrefs = items.map((item) => ({
+      ...item,
+      brandPref: brandPrefs[item.id] || undefined,
+    }));
+
+    try {
+      await fetch("/api/shopping-list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), items: itemsWithPrefs, address, radius }),
+      });
+    } catch {
+      // non-fatal
+    }
+  }
+
+  // ── Load a saved list into the dashboard state ─────────────────────────
+  function handleLoadList(data: { items: unknown[]; address: string | null; radius: number }) {
+    const loaded = data.items as GroceryItem[];
+    setItems(loaded);
+    const prefs: Record<string, string> = {};
+    for (const item of loaded) {
+      if (item.brandPref) prefs[item.id] = item.brandPref;
+    }
+    setBrandPrefsState(prefs);
+    if (data.address) {
+      setAddress(data.address);
+      localStorage.setItem("grovr_address", data.address);
+    }
+    if (data.radius) setRadius(data.radius);
+    setComparisons([]);
+    setScreen("list");
+  }
+
   const Logo = () => (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <div
@@ -631,10 +688,128 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* ── Pricing loading modal ── */}
+        {pricingLoading && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 1000,
+              background: "rgba(0,0,0,0.45)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 24,
+            }}
+          >
+            <div
+              style={{
+                background: "white",
+                borderRadius: 20,
+                padding: isDesktop ? "40px 48px" : "32px 28px",
+                maxWidth: 400,
+                width: "100%",
+                textAlign: "center",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+              }}
+            >
+              {/* Spinner */}
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  margin: "0 auto 20px",
+                  border: "4px solid var(--border)",
+                  borderTopColor: "var(--green)",
+                  borderRadius: "50%",
+                  animation: "spin 0.8s linear infinite",
+                }}
+              />
+              <div
+                style={{
+                  fontFamily: "Arial, sans-serif",
+                  fontWeight: 700,
+                  fontSize: 18,
+                  color: "var(--text)",
+                  marginBottom: 8,
+                }}
+              >
+                Finding the best prices
+              </div>
+              <div
+                style={{
+                  fontSize: 14,
+                  color: "var(--muted)",
+                  lineHeight: 1.6,
+                  marginBottom: 20,
+                }}
+              >
+                We&apos;re scanning stores near you to find the lowest prices on your list. This may take a couple of minutes.
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--muted)",
+                  background: "var(--bg)",
+                  borderRadius: 10,
+                  padding: "10px 14px",
+                  lineHeight: 1.5,
+                }}
+              >
+                Estimated subtotal based on current listed prices. Final total may vary and does not include delivery fees, service fees, taxes, or promotions applied at checkout.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Screen content */}
         <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-          {screen === "list" && <ShoppingList {...screenProps} />}
+          {screen === "list" && (
+            <>
+              <ShoppingList {...screenProps} />
+              {items.length > 0 && (
+                <div
+                  style={{
+                    padding: isDesktop ? "0 32px 16px" : "0 16px 12px",
+                    flexShrink: 0,
+                  }}
+                >
+                  <button
+                    onClick={handleSaveList}
+                    style={{
+                      width: "100%",
+                      padding: "11px 0",
+                      borderRadius: 10,
+                      border: "1px solid var(--border)",
+                      background: "white",
+                      color: "var(--text)",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 7,
+                    }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    Save List
+                  </button>
+                </div>
+              )}
+            </>
+          )}
           {screen === "compare" && <RetailerComparison {...screenProps} />}
+          {screen === "saved" && <SavedLists onLoad={handleLoadList} isDesktop={isDesktop} />}
         </div>
 
         {/* Bottom nav — mobile only */}

@@ -4,9 +4,9 @@ import {
   text,
   integer,
   numeric,
+  boolean,
   timestamp,
   index,
-  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
@@ -38,7 +38,7 @@ export const priceSnapshots = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Shopping lists — one active list per Clerk user
+// Shopping lists — multiple named lists per Clerk user, one active at a time
 // ---------------------------------------------------------------------------
 
 export const shoppingLists = pgTable(
@@ -46,13 +46,18 @@ export const shoppingLists = pgTable(
   {
     id: serial("id").primaryKey(),
     userId: text("user_id").notNull(),
+    name: text("name").notNull().default("My List"),
+    isActive: boolean("is_active").notNull().default(true),
     address: text("address"),
     radius: integer("radius").default(5),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (table) => [uniqueIndex("idx_shopping_lists_user").on(table.userId)]
+  (table) => [index("idx_shopping_lists_user").on(table.userId)]
 );
 
 // ---------------------------------------------------------------------------
