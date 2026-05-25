@@ -104,12 +104,14 @@ export async function POST(request: Request) {
   // Fire-and-forget SMS if phone provided
   if (phone) {
     const cheapest = comparisons[0];
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://grovr.com";
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://grovr.app";
     const msg = [
-      `Grovr found your best deal!`,
-      `${cheapest.retailer.name} has your ${sanitizedItems.length} item${sanitizedItems.length !== 1 ? "s" : ""} for $${cheapest.subtotal.toFixed(2)}.`,
-      `View results: ${baseUrl}/results/${resultId}`,
-    ].join(" ");
+      `Grovr: Your shopping list is ready!`,
+      `Total estimated cost: $${cheapest.subtotal.toFixed(2)}`,
+      `Recommended store: ${cheapest.retailer.name}`,
+      ``,
+      `Shopping cart link: ${baseUrl}/results/${resultId}`,
+    ].join("\n");
     sendSMS(phone, msg).catch((err) => console.error("[notify] SMS failed:", err));
   }
 
