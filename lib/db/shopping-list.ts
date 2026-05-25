@@ -14,9 +14,13 @@ interface ListSummary {
   id: number;
   name: string;
   itemCount: number;
+  estimatedTotal: string | null;
+  recommendedStore: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const MAX_LISTS = 10;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -162,7 +166,8 @@ export async function getAllLists(userId: string): Promise<ListSummary[]> {
       .select()
       .from(shoppingLists)
       .where(eq(shoppingLists.userId, userId))
-      .orderBy(desc(shoppingLists.updatedAt));
+      .orderBy(desc(shoppingLists.updatedAt))
+      .limit(MAX_LISTS);
 
     // Get item counts
     const summaries: ListSummary[] = [];
@@ -176,6 +181,8 @@ export async function getAllLists(userId: string): Promise<ListSummary[]> {
         id: list.id,
         name: list.name,
         itemCount: items.length,
+        estimatedTotal: list.estimatedTotal,
+        recommendedStore: list.recommendedStore,
         createdAt: list.createdAt,
         updatedAt: list.updatedAt,
       });
@@ -198,7 +205,17 @@ export async function saveListAs(
   items: GroceryItem[],
   address?: string,
   radius?: number
-): Promise<{ id: number }> {
+): Promise<{ id: number } | { error: string }> {
+  // Check list cap
+  const existing = await db
+    .select({ id: shoppingLists.id })
+    .from(shoppingLists)
+    .where(eq(shoppingLists.userId, userId));
+
+  if (existing.length >= MAX_LISTS) {
+    return { error: `You can save up to ${MAX_LISTS} lists. Delete one to save a new one.` };
+  }
+
   // Deactivate any currently active list
   await deactivateAll(userId);
 
@@ -307,4 +324,57 @@ export async function newList(userId: string): Promise<SavedList> {
     radius: list.radius ?? 5,
     updatedAt: list.updatedAt,
   };
+}
+
+/**
+ * Rename a list.
+ */
+export async function renameList(
+  userId: string,
+  listId: number,
+  name: string
+): Promise<boolean> {
+  try {
+    const lists = await db
+      .select({ id: shoppingLists.id })
+      .from(shoppingLists)
+      .where(and(eq(shoppingLists.id, listId), eq(shoppingLists.userId, userId)))
+      .limit(1);
+
+    if (lists.length === 0) return false;
+
+    await db
+      .update(shoppingLists)
+      .set({ name, updatedAt: new Date() })
+      .where(eq(shoppingLists.id, listId));
+
+    return true;
+  } catch (err) {
+    console.warn("[db/shopping-list] renameList failed:", err);
+    return false;
+  }
+}
+
+/**
+ * Save comparison results (estimated total + recommended store) on the active list.
+ */
+export async function updateListResults(
+  userId: string,
+  estimatedTotal: number,
+  recommendedStore: string
+): Promise<void> {
+  try {
+    await db
+      .update(shoppingLists)
+      .set({
+        estimatedTotal: estimatedTotal.toFixed(2),
+        recommendedStore,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(shoppingLists.userId, userId), eq(shoppingLists.isActive, true))
+      );
+  } catch (err) {
+    console.warn("[db/shopping-list] updateListResults failed:", err);
+  }
 }

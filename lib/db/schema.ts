@@ -48,6 +48,8 @@ export const shoppingLists = pgTable(
     userId: text("user_id").notNull(),
     name: text("name").notNull().default("My List"),
     isActive: boolean("is_active").notNull().default(true),
+    estimatedTotal: numeric("estimated_total", { precision: 8, scale: 2 }),
+    recommendedStore: text("recommended_store"),
     address: text("address"),
     radius: integer("radius").default(5),
     createdAt: timestamp("created_at", { withTimezone: true })

@@ -408,11 +408,15 @@ export default function Dashboard() {
     }));
 
     try {
-      await fetch("/api/shopping-list", {
+      const res = await fetch("/api/shopping-list", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), items: itemsWithPrefs, address, radius }),
       });
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string };
+        if (data.error) window.alert(data.error);
+      }
     } catch {
       // non-fatal
     }

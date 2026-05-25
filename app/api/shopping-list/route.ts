@@ -8,6 +8,7 @@ import {
   loadList,
   deleteList,
   newList,
+  renameList,
 } from "@/lib/db/shopping-list";
 import type { GroceryItem } from "@/lib/types";
 
@@ -38,9 +39,10 @@ export async function GET(request: Request) {
   });
 }
 
-// PUT /api/shopping-list              → auto-save active list
-// PUT /api/shopping-list?action=load  → load a saved list { listId }
-// PUT /api/shopping-list?action=new   → start a new empty list
+// PUT /api/shopping-list                → auto-save active list
+// PUT /api/shopping-list?action=load    → load a saved list { listId }
+// PUT /api/shopping-list?action=new     → start a new empty list
+// PUT /api/shopping-list?action=rename  → rename a list { listId, name }
 export async function PUT(request: Request) {
   const { userId } = await auth();
   if (!userId) {
@@ -68,6 +70,26 @@ export async function PUT(request: Request) {
       address: list.address,
       radius: list.radius,
     });
+  }
+
+  if (action === "rename") {
+    let body: { listId: number; name: string };
+    try {
+      body = (await request.json()) as { listId: number; name: string };
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    if (!body.name?.trim()) {
+      return NextResponse.json({ error: "name is required" }, { status: 400 });
+    }
+
+    const renamed = await renameList(userId, body.listId, body.name.trim());
+    if (!renamed) {
+      return NextResponse.json({ error: "List not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true });
   }
 
   if (action === "new") {
@@ -138,6 +160,10 @@ export async function POST(request: Request) {
     body.address,
     body.radius
   );
+
+  if ("error" in result) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
+  }
 
   return NextResponse.json({ success: true, listId: result.id });
 }

@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { searchProducts } from "@/lib/provider";
 import { compareRetailerPrices } from "@/lib/pricing";
 import { kvSet, RESULTS_PREFIX } from "@/lib/kv";
 import { sendSMS } from "@/lib/twilio";
+import { updateListResults } from "@/lib/db/shopping-list";
 import type { GroceryItem, Retailer, StoredResults } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -91,6 +93,13 @@ export async function POST(request: Request) {
   }
 
   const comparisons = compareRetailerPrices(retailerMatches);
+
+  // Save estimated total + recommended store on the user's active list
+  const { userId } = await auth();
+  if (userId && comparisons.length > 0) {
+    const cheapest = comparisons[0];
+    updateListResults(userId, cheapest.subtotal, cheapest.retailer.name).catch(() => {});
+  }
 
   // Store results in KV for shareable link (48hr TTL)
   const resultId = crypto.randomUUID().slice(0, 8);

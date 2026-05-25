@@ -2,10 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react";
 
+const MAX_LISTS = 10;
+
 interface ListSummary {
   id: number;
   name: string;
   itemCount: number;
+  estimatedTotal: string | null;
+  recommendedStore: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -73,6 +77,25 @@ export default function SavedLists({ onLoad, isDesktop }: Props) {
     }
   }
 
+  async function handleRename(listId: number, currentName: string) {
+    const newName = window.prompt("Rename this list:", currentName);
+    if (!newName?.trim() || newName.trim() === currentName) return;
+
+    try {
+      const res = await fetch("/api/shopping-list?action=rename", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listId, name: newName.trim() }),
+      });
+      if (!res.ok) return;
+      setLists((prev) =>
+        prev.map((l) => (l.id === listId ? { ...l, name: newName.trim() } : l))
+      );
+    } catch {
+      // non-fatal
+    }
+  }
+
   async function handleNewList() {
     try {
       const res = await fetch("/api/shopping-list?action=new", { method: "PUT" });
@@ -106,6 +129,8 @@ export default function SavedLists({ onLoad, isDesktop }: Props) {
     );
   }
 
+  const atCap = lists.length >= MAX_LISTS;
+
   return (
     <div
       style={{
@@ -135,7 +160,9 @@ export default function SavedLists({ onLoad, isDesktop }: Props) {
             Saved Lists
           </h2>
           <p style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 0" }}>
-            {lists.length === 0 ? "No saved lists yet" : `${lists.length} list${lists.length !== 1 ? "s" : ""}`}
+            {lists.length === 0
+              ? "No saved lists yet"
+              : `${lists.length} list${lists.length !== 1 ? "s" : ""}${atCap ? " (max)" : ""}`}
           </p>
         </div>
         <button
@@ -161,6 +188,24 @@ export default function SavedLists({ onLoad, isDesktop }: Props) {
           New List
         </button>
       </div>
+
+      {/* Cap warning */}
+      {atCap && (
+        <div
+          style={{
+            background: "#fffbeb",
+            border: "1px solid #fde68a",
+            borderRadius: 10,
+            padding: "10px 14px",
+            fontSize: 13,
+            color: "#92400e",
+            marginBottom: 16,
+            lineHeight: 1.5,
+          }}
+        >
+          You&apos;ve reached the maximum of {MAX_LISTS} saved lists. Delete a list to save a new one.
+        </div>
+      )}
 
       {/* List cards */}
       {lists.length === 0 ? (
@@ -211,15 +256,48 @@ export default function SavedLists({ onLoad, isDesktop }: Props) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div
                   style={{
-                    fontSize: 15,
-                    fontWeight: 600,
-                    color: "var(--text)",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
                   }}
                 >
-                  {list.name}
+                  <div
+                    onClick={() => handleRename(list.id, list.name)}
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 600,
+                      color: "var(--text)",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      cursor: "pointer",
+                    }}
+                    title="Click to rename"
+                  >
+                    {list.name}
+                  </div>
+                  <svg
+                    onClick={() => handleRename(list.id, list.name)}
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    style={{ flexShrink: 0, cursor: "pointer", color: "var(--muted)", opacity: 0.5 }}
+                  >
+                    <path
+                      d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
                 </div>
                 <div
                   style={{
@@ -229,11 +307,23 @@ export default function SavedLists({ onLoad, isDesktop }: Props) {
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
+                    flexWrap: "wrap",
                   }}
                 >
                   <span>{list.itemCount} item{list.itemCount !== 1 ? "s" : ""}</span>
                   <span style={{ opacity: 0.4 }}>|</span>
                   <span>{formatDate(list.updatedAt)}</span>
+                  {list.estimatedTotal && (
+                    <>
+                      <span style={{ opacity: 0.4 }}>|</span>
+                      <span style={{ color: "var(--green)", fontWeight: 600 }}>
+                        ${parseFloat(list.estimatedTotal).toFixed(2)}
+                        {list.recommendedStore && (
+                          <span style={{ fontWeight: 400, color: "var(--muted)" }}> at {list.recommendedStore}</span>
+                        )}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 
