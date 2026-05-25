@@ -26,13 +26,11 @@ export function compareRetailerPrices(
   );
 
   return comparisons.sort((a, b) => {
-    const aHasUnavailable = a.items.some((m) => m.price === 0);
-    const bHasUnavailable = b.items.some((m) => m.price === 0);
+    const aMissing = a.items.filter((m) => m.price === 0).length;
+    const bMissing = b.items.filter((m) => m.price === 0).length;
 
-    // Fully-stocked stores always rank above stores with unavailable items
-    if (aHasUnavailable !== bHasUnavailable) {
-      return aHasUnavailable ? 1 : -1;
-    }
+    // Fewer missing items = better. Fully-stocked stores rank first.
+    if (aMissing !== bMissing) return aMissing - bMissing;
 
     return a.subtotal - b.subtotal;
   });

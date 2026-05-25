@@ -5,7 +5,8 @@ import type { GroceryItem, Retailer } from "@/lib/types";
 export const maxDuration = 60;
 
 interface WarmCacheRequestBody {
-  item: GroceryItem;
+  item?: GroceryItem;
+  items?: GroceryItem[];
   stores: Retailer[];
 }
 
@@ -35,32 +36,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { item, stores } = body;
+  const { item, items: itemsArray, stores } = body;
 
-  if (!item?.name || !Array.isArray(stores) || stores.length === 0) {
-    return NextResponse.json({ error: "item and stores are required" }, { status: 400 });
+  // Accept either a single item or an array of items
+  const rawItems = itemsArray ?? (item ? [item] : []);
+  if (rawItems.length === 0 || !Array.isArray(stores) || stores.length === 0) {
+    return NextResponse.json({ error: "item(s) and stores are required" }, { status: 400 });
   }
 
-  const sanitizedItem: GroceryItem = {
-    ...item,
-    name: item.name.trim().slice(0, 80),
-    brandPref: item.brandPref?.trim().slice(0, 40) || undefined,
-  };
+  const sanitizedItems: GroceryItem[] = rawItems.map((i) => ({
+    ...i,
+    name: i.name.trim().slice(0, 80),
+    brandPref: i.brandPref?.trim().slice(0, 40) || undefined,
+  }));
 
-  // Scrape sequentially with a total time budget — cache whatever succeeds
+  // Scrape each item at each store sequentially — one Browserless session at a time
   const startTime = Date.now();
   let cached = 0;
   for (const store of stores) {
     const elapsed = Date.now() - startTime;
     if (elapsed >= TOTAL_BUDGET_MS) {
-      console.warn(`[warm-cache] budget exhausted after ${elapsed}ms, cached ${cached}/${stores.length} stores`);
+      console.warn(`[warm-cache] budget exhausted after ${elapsed}ms, cached ${cached} store-passes`);
       break;
     }
     const remaining = TOTAL_BUDGET_MS - elapsed;
     const storeTimeout = Math.min(STORE_TIMEOUT_MS, remaining);
     try {
       const result = await withTimeout(
-        searchProducts([sanitizedItem], store),
+        searchProducts(sanitizedItems, store),
         storeTimeout
       );
       if (result) cached++;

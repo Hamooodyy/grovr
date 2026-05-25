@@ -222,15 +222,17 @@ export default function Dashboard() {
   const warmTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   function warmCache(itemsToWarm: GroceryItem[], nearbyStores: Retailer[]) {
-    if (nearbyStores.length === 0) return;
-    for (const item of itemsToWarm) {
-      const warmItem = { ...item, brandPref: brandPrefs[item.id] || undefined };
-      fetch("/api/warm-cache", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ item: warmItem, stores: nearbyStores }),
-      }).catch(() => {});
-    }
+    if (nearbyStores.length === 0 || itemsToWarm.length === 0) return;
+    const warmItems = itemsToWarm.map((item) => ({
+      ...item,
+      brandPref: brandPrefs[item.id] || undefined,
+    }));
+    // Single request for all items — avoids concurrent Browserless sessions
+    fetch("/api/warm-cache", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: warmItems, stores: nearbyStores }),
+    }).catch(() => {});
   }
 
   /** Debounced warm-cache: waits 3s before firing, cancels if item is removed or changed. */
