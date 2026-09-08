@@ -10,12 +10,15 @@ import {
   TextInput,
   StyleSheet,
   SafeAreaView,
-  SectionList,
+  FlatList,
   ActivityIndicator,
   Alert,
-  ActionSheetIOS,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Animated,
 } from "react-native";
+import { Swipeable, GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   getPantryItems,
   addPantryItem,
@@ -24,10 +27,10 @@ import {
   type PantryItemResponse,
 } from "../../lib/api";
 
-const CATEGORY_LABELS: Record<string, { label: string; icon: string }> = {
-  fridge: { label: "Fridge", icon: "🧊" },
-  spice: { label: "Spices", icon: "🌿" },
-  pantry: { label: "Pantry", icon: "🏠" },
+const CATEGORY_LABELS: Record<string, { label: string; emptyTitle: string; emptyText: string }> = {
+  fridge: { label: "Fridge", emptyTitle: "Your fridge is empty!", emptyText: "Tap \"+ Add\" to stock your fridge." },
+  spice: { label: "Spice Rack", emptyTitle: "Where's the flavor?", emptyText: "Tap \"+ Add\" to add some spices." },
+  pantry: { label: "Pantry", emptyTitle: "You've been raided!", emptyText: "Tap \"+ Add\" to restock your pantry." },
 };
 
 const CATEGORY_ORDER = ["fridge", "spice", "pantry"];
@@ -38,7 +41,7 @@ const STATUS_CONFIG: Record<
 > = {
   fresh: { label: "Fresh", color: "#16a34a", bg: "#f0fdf4" },
   use_soon: { label: "Use soon", color: "#ca8a04", bg: "#fefce8" },
-  urgent: { label: "Today!", color: "#ea580c", bg: "#fff7ed" },
+  urgent: { label: "Use today", color: "#ea580c", bg: "#fff7ed" },
   expired: { label: "Expired", color: "#dc2626", bg: "#fef2f2" },
 };
 
@@ -78,6 +81,8 @@ export default function PantryScreen() {
   );
   const [editQty, setEditQty] = useState(1);
   const [editUnit, setEditUnit] = useState("ct");
+  const [editCategory, setEditCategory] = useState("fridge");
+  const [activeTab, setActiveTab] = useState("fridge");
 
   const fetchItems = useCallback(async () => {
     try {
@@ -110,7 +115,13 @@ export default function PantryScreen() {
         quantity: pickerQty,
         unit: pickerUnit,
       });
-      setItems((prev) => [...prev, data.item]);
+      setItems((prev) => {
+        const exists = prev.find((i) => i.id === data.item.id);
+        if (exists) {
+          return prev.map((i) => (i.id === data.item.id ? data.item : i));
+        }
+        return [...prev, data.item];
+      });
       setNewName("");
       setPickerQty(1);
       setPickerUnit("ct");
@@ -124,31 +135,32 @@ export default function PantryScreen() {
     }
   }
 
-  function handleRemove(item: PantryItemResponse) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options: ["Cancel", "Used up", "Mark expired"],
-        destructiveButtonIndex: 2,
-        cancelButtonIndex: 0,
-        title: item.name,
-        message: item.quantity && item.unit
-          ? `${item.quantity} ${item.unit}`
-          : undefined,
-      },
-      async (buttonIndex) => {
-        if (buttonIndex === 0) return;
-        const reason = buttonIndex === 1 ? "used" : "expired";
-        try {
-          const token = await getToken();
-          if (!token) return;
-          await deletePantryItem(token, item.id, reason as "used" | "expired");
-          setItems((prev) => prev.filter((i) => i.id !== item.id));
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        } catch {
-          Alert.alert("Error", "Failed to remove item");
-        }
-      }
+  async function handleRemove(item: PantryItemResponse) {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      setItems((prev) => prev.filter((i) => i.id !== item.id));
+      await deletePantryItem(token, item.id, "used");
+    } catch {
+      Alert.alert("Error", "Failed to remove item");
+      fetchItems();
+    }
+  }
+
+  function renderLeftActions(
+    _progress: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>
+  ) {
+    const opacity = dragX.interpolate({
+      inputRange: [0, 60, 80],
+      outputRange: [0, 0.8, 1],
+      extrapolate: "clamp",
+    });
+    return (
+      <Animated.View style={[styles.swipeAction, { opacity }]}>
+        <Text style={styles.swipeActionText}>Remove</Text>
+      </Animated.View>
     );
   }
 
@@ -156,6 +168,7 @@ export default function PantryScreen() {
     setEditingItem(item);
     setEditQty(item.quantity ?? 1);
     setEditUnit(item.unit ?? "ct");
+    setEditCategory(getItemCategory(item));
   }
 
   async function saveEditQuantity() {
@@ -167,33 +180,39 @@ export default function PantryScreen() {
         id: editingItem.id,
         quantity: editQty,
         unit: editUnit,
+        category: editCategory,
       });
       setItems((prev) =>
         prev.map((i) =>
           i.id === editingItem.id
-            ? { ...i, quantity: editQty, unit: editUnit }
+            ? { ...i, quantity: editQty, unit: editUnit, category: editCategory as PantryItemResponse["category"] }
             : i
         )
       );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
-      Alert.alert("Error", "Failed to update quantity");
+      Alert.alert("Error", "Failed to update");
     } finally {
       setEditingItem(null);
     }
   }
 
-  const sections = CATEGORY_ORDER.map((cat) => ({
-    key: cat,
-    title:
-      `${CATEGORY_LABELS[cat]?.icon ?? ""} ${CATEGORY_LABELS[cat]?.label ?? cat}`,
-    data: items
-      .filter((i) => (i.category ?? "pantry") === cat)
-      .sort((a, b) => {
-        const order = { expired: 0, urgent: 1, use_soon: 2, fresh: 3 };
-        return (order[a.status] ?? 3) - (order[b.status] ?? 3);
-      }),
-  })).filter((s) => s.data.length > 0);
+  function getItemCategory(item: PantryItemResponse): string {
+    return CATEGORY_ORDER.includes(item.category as string) ? item.category! : "pantry";
+  }
+
+  const filteredItems = items
+    .filter((i) => getItemCategory(i) === activeTab)
+    .sort((a, b) => {
+      const expiryA = a.estimatedExpiry ? new Date(a.estimatedExpiry).getTime() : Infinity;
+      const expiryB = b.estimatedExpiry ? new Date(b.estimatedExpiry).getTime() : Infinity;
+      return expiryA - expiryB;
+    });
+
+  const tabCounts = CATEGORY_ORDER.reduce((acc, cat) => {
+    acc[cat] = items.filter((i) => getItemCategory(i) === cat).length;
+    return acc;
+  }, {} as Record<string, number>);
 
   // Items from onboarding with no quantity
   const needsQuantity = items.filter((i) => i.quantity == null);
@@ -207,75 +226,114 @@ export default function PantryScreen() {
   }
 
   return (
+    <GestureHandlerRootView style={styles.container}>
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Pantry</Text>
+        <Text style={styles.title}>My Kitchen</Text>
         <Pressable
           style={({ pressed }) => [
             styles.addHeaderButton,
             pressed && { opacity: 0.7 },
           ]}
-          onPress={() => setShowAdd(!showAdd)}
+          onPress={() => {
+            setNewName("");
+            setPickerQty(1);
+            setPickerUnit("ct");
+            setShowAdd(true);
+          }}
         >
-          <Text style={styles.addHeaderText}>
-            {showAdd ? "Cancel" : "+ Add"}
-          </Text>
+          <Text style={styles.addHeaderText}>+ Add</Text>
         </Pressable>
       </View>
 
-      {showAdd && (
-        <View style={styles.addSection}>
-          <TextInput
-            style={styles.addInput}
-            placeholder="Item name (e.g. chicken breast)"
-            placeholderTextColor="#6a7c71"
-            value={newName}
-            onChangeText={setNewName}
-            autoFocus
-          />
-          <View style={styles.pickerRow}>
-            <View style={styles.pickerCol}>
-              <Text style={styles.pickerLabel}>Qty</Text>
-              <Picker
-                selectedValue={pickerQty}
-                onValueChange={setPickerQty}
-                style={styles.picker}
-                itemStyle={styles.pickerItem}
+      <View style={styles.tabBar}>
+        {CATEGORY_ORDER.map((cat) => {
+          const info = CATEGORY_LABELS[cat];
+          const active = activeTab === cat;
+          return (
+            <Pressable
+              key={cat}
+              style={[styles.tab, active && styles.tabActive]}
+              onPress={() => setActiveTab(cat)}
+            >
+              <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                {info?.label}
+                {tabCounts[cat] > 0 ? ` (${tabCounts[cat]})` : ""}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* Add item bottom sheet */}
+      <Modal visible={showAdd} transparent animationType="slide">
+        <KeyboardAvoidingView
+          style={styles.sheetOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <Pressable style={styles.sheetBackdrop} onPress={() => setShowAdd(false)} />
+          <View style={styles.sheetContent}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.modalHeader}>
+              <Pressable onPress={() => setShowAdd(false)}>
+                <Text style={styles.modalCancel}>Cancel</Text>
+              </Pressable>
+              <Text style={styles.modalTitle}>Add Item</Text>
+              <Pressable
+                onPress={handleAdd}
+                disabled={adding || !newName.trim()}
               >
-                {QUANTITIES.map((q) => (
-                  <Picker.Item key={q} label={String(q)} value={q} />
-                ))}
-              </Picker>
+                <Text
+                  style={[
+                    styles.modalSave,
+                    (adding || !newName.trim()) && { opacity: 0.4 },
+                  ]}
+                >
+                  {adding ? "Adding..." : "Add"}
+                </Text>
+              </Pressable>
             </View>
-            <View style={styles.pickerCol}>
-              <Text style={styles.pickerLabel}>Unit</Text>
-              <Picker
-                selectedValue={pickerUnit}
-                onValueChange={setPickerUnit}
-                style={styles.picker}
-                itemStyle={styles.pickerItem}
-              >
-                {UNITS.map((u) => (
-                  <Picker.Item key={u} label={u} value={u} />
-                ))}
-              </Picker>
+            <View style={styles.addSection}>
+              <TextInput
+                style={styles.addInput}
+                placeholder="Item name (e.g. chicken breast)"
+                placeholderTextColor="#6a7c71"
+                value={newName}
+                onChangeText={setNewName}
+                autoFocus
+              />
+              <View style={styles.pickerRow}>
+                <View style={styles.pickerCol}>
+                  <Text style={styles.pickerLabel}>Qty</Text>
+                  <Picker
+                    selectedValue={pickerQty}
+                    onValueChange={setPickerQty}
+                    style={styles.picker}
+                    itemStyle={styles.pickerItem}
+                  >
+                    {QUANTITIES.map((q) => (
+                      <Picker.Item key={q} label={String(q)} value={q} />
+                    ))}
+                  </Picker>
+                </View>
+                <View style={styles.pickerCol}>
+                  <Text style={styles.pickerLabel}>Unit</Text>
+                  <Picker
+                    selectedValue={pickerUnit}
+                    onValueChange={setPickerUnit}
+                    style={styles.picker}
+                    itemStyle={styles.pickerItem}
+                  >
+                    {UNITS.map((u) => (
+                      <Picker.Item key={u} label={u} value={u} />
+                    ))}
+                  </Picker>
+                </View>
+              </View>
             </View>
           </View>
-          <Pressable
-            style={({ pressed }) => [
-              styles.addButton,
-              (adding || !newName.trim()) && { opacity: 0.4 },
-              pressed && { opacity: 0.7 },
-            ]}
-            onPress={handleAdd}
-            disabled={adding || !newName.trim()}
-          >
-            <Text style={styles.addButtonText}>
-              {adding ? "Adding..." : "Add to pantry"}
-            </Text>
-          </Pressable>
-        </View>
-      )}
+        </KeyboardAvoidingView>
+      </Modal>
 
       {needsQuantity.length > 0 && !showAdd && (
         <Pressable
@@ -289,21 +347,19 @@ export default function PantryScreen() {
         </Pressable>
       )}
 
-      {items.length === 0 ? (
+      {filteredItems.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>🧑‍🍳</Text>
-          <Text style={styles.emptyTitle}>Your pantry is empty</Text>
+          <Text style={styles.emptyTitle}>
+            {CATEGORY_LABELS[activeTab]?.emptyTitle ?? "Nothing here yet"}
+          </Text>
           <Text style={styles.emptyText}>
-            Tap "+ Add" to start tracking what you have on hand.
+            {CATEGORY_LABELS[activeTab]?.emptyText ?? "Tap \"+ Add\" to get started."}
           </Text>
         </View>
       ) : (
-        <SectionList
-          sections={sections}
+        <FlatList
+          data={filteredItems}
           keyExtractor={(item) => String(item.id)}
-          renderSectionHeader={({ section }) => (
-            <Text style={styles.sectionHeader}>{section.title}</Text>
-          )}
           renderItem={({ item }) => {
             const status = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.fresh;
             const hasQty = item.quantity != null && item.unit;
@@ -312,15 +368,16 @@ export default function PantryScreen() {
               : "Set qty";
 
             return (
-              <View style={styles.itemRow}>
+              <Swipeable
+                renderLeftActions={renderLeftActions}
+                onSwipeableOpen={(direction) => {
+                  if (direction === "left") handleRemove(item);
+                }}
+                leftThreshold={80}
+                overshootLeft={false}
+              >
                 <Pressable
-                  style={styles.checkButton}
-                  onPress={() => handleRemove(item)}
-                >
-                  <View style={styles.checkbox} />
-                </Pressable>
-                <Pressable
-                  style={styles.itemContent}
+                  style={styles.itemRow}
                   onPress={() => openEditQuantity(item)}
                 >
                   <View style={styles.itemLeft}>
@@ -345,63 +402,79 @@ export default function PantryScreen() {
                     </Text>
                   </View>
                 </Pressable>
-              </View>
+              </Swipeable>
             );
           }}
           contentContainerStyle={styles.listContent}
-          stickySectionHeadersEnabled={false}
         />
       )}
 
-      {/* Edit quantity modal */}
-      <Modal
-        visible={editingItem !== null}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Pressable onPress={() => setEditingItem(null)}>
-              <Text style={styles.modalCancel}>Cancel</Text>
-            </Pressable>
-            <Text style={styles.modalTitle}>
-              {editingItem?.name ?? "Edit"}
-            </Text>
-            <Pressable onPress={saveEditQuantity}>
-              <Text style={styles.modalSave}>Save</Text>
-            </Pressable>
-          </View>
-          <View style={styles.pickerRow}>
-            <View style={styles.pickerCol}>
-              <Text style={styles.pickerLabel}>Qty</Text>
-              <Picker
-                selectedValue={editQty}
-                onValueChange={setEditQty}
-                style={styles.picker}
-                itemStyle={styles.pickerItem}
-              >
-                {QUANTITIES.map((q) => (
-                  <Picker.Item key={q} label={String(q)} value={q} />
-                ))}
-              </Picker>
+      {/* Edit quantity bottom sheet */}
+      <Modal visible={editingItem !== null} transparent animationType="slide">
+        <View style={styles.sheetOverlay}>
+          <Pressable style={styles.sheetBackdrop} onPress={() => setEditingItem(null)} />
+          <View style={styles.sheetContent}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.modalHeader}>
+              <Pressable onPress={() => setEditingItem(null)}>
+                <Text style={styles.modalCancel}>Cancel</Text>
+              </Pressable>
+              <Text style={styles.modalTitle}>
+                {editingItem?.name ?? "Edit"}
+              </Text>
+              <Pressable onPress={saveEditQuantity}>
+                <Text style={styles.modalSave}>Save</Text>
+              </Pressable>
             </View>
-            <View style={styles.pickerCol}>
-              <Text style={styles.pickerLabel}>Unit</Text>
-              <Picker
-                selectedValue={editUnit}
-                onValueChange={setEditUnit}
-                style={styles.picker}
-                itemStyle={styles.pickerItem}
-              >
-                {UNITS.map((u) => (
-                  <Picker.Item key={u} label={u} value={u} />
-                ))}
-              </Picker>
+            <View style={styles.categoryRow}>
+              {CATEGORY_ORDER.map((cat) => {
+                const active = editCategory === cat;
+                return (
+                  <Pressable
+                    key={cat}
+                    style={[styles.categoryChip, active && styles.categoryChipActive]}
+                    onPress={() => setEditCategory(cat)}
+                  >
+                    <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
+                      {CATEGORY_LABELS[cat]?.label ?? cat}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.pickerRow}>
+              <View style={styles.pickerCol}>
+                <Text style={styles.pickerLabel}>Qty</Text>
+                <Picker
+                  selectedValue={editQty}
+                  onValueChange={setEditQty}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {QUANTITIES.map((q) => (
+                    <Picker.Item key={q} label={String(q)} value={q} />
+                  ))}
+                </Picker>
+              </View>
+              <View style={styles.pickerCol}>
+                <Text style={styles.pickerLabel}>Unit</Text>
+                <Picker
+                  selectedValue={editUnit}
+                  onValueChange={setEditUnit}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {UNITS.map((u) => (
+                    <Picker.Item key={u} label={u} value={u} />
+                  ))}
+                </Picker>
+              </View>
             </View>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
     </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 
@@ -434,12 +507,38 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
+  tabBar: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "white",
+    borderWidth: 1.5,
+    borderColor: "#ddeee4",
+    alignItems: "center",
+  },
+  tabActive: {
+    backgroundColor: "#f0fdf4",
+    borderColor: "#16a34a",
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#6a7c71",
+  },
+  tabTextActive: {
+    color: "#16a34a",
+    fontWeight: "700",
+  },
   addSection: {
     paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingTop: 16,
     paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ddeee4",
   },
   addInput: {
     backgroundColor: "white",
@@ -473,18 +572,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#0e1f14",
   },
-  addButton: {
-    backgroundColor: "#16a34a",
-    borderRadius: 12,
-    padding: 14,
-    alignItems: "center",
-    marginTop: 4,
-  },
-  addButtonText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "600",
-  },
   quantityBanner: {
     backgroundColor: "#fff7ed",
     paddingHorizontal: 20,
@@ -504,10 +591,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 32,
   },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
   emptyTitle: {
     fontSize: 20,
     fontWeight: "700",
@@ -523,13 +606,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
-  sectionHeader: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0e1f14",
-    marginTop: 20,
-    marginBottom: 8,
-  },
   itemRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -538,26 +614,22 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: "#e8f0eb",
-    overflow: "hidden",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  checkButton: {
-    padding: 14,
+  swipeAction: {
+    backgroundColor: "#dc2626",
     justifyContent: "center",
-    alignItems: "center",
+    alignItems: "flex-start",
+    paddingLeft: 20,
+    borderRadius: 12,
+    marginBottom: 8,
+    width: 100,
   },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: "#c4d4cb",
-  },
-  itemContent: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingRight: 14,
-    paddingVertical: 12,
+  swipeActionText: {
+    color: "white",
+    fontSize: 15,
+    fontWeight: "700",
   },
   itemLeft: {
     flex: 1,
@@ -581,9 +653,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  modalContainer: {
+  sheetOverlay: {
     flex: 1,
+    justifyContent: "flex-end",
+  },
+  sheetBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  sheetContent: {
     backgroundColor: "#f6fdf8",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 34,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#c4d4cb",
+    alignSelf: "center",
+    marginTop: 8,
+    marginBottom: 4,
   },
   modalHeader: {
     flexDirection: "row",
@@ -593,6 +688,35 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#ddeee4",
+  },
+  categoryRow: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 4,
+    gap: 8,
+  },
+  categoryChip: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "white",
+    borderWidth: 1.5,
+    borderColor: "#ddeee4",
+    alignItems: "center",
+  },
+  categoryChipActive: {
+    backgroundColor: "#f0fdf4",
+    borderColor: "#16a34a",
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#6a7c71",
+  },
+  categoryChipTextActive: {
+    color: "#16a34a",
+    fontWeight: "700",
   },
   modalCancel: {
     fontSize: 16,

@@ -15,12 +15,17 @@ async function getProfile(userId: string) {
     .then((rows) => rows[0] ?? null);
 }
 
+const VALID_CATEGORIES = ["fridge", "spice", "pantry"];
+
 function serializeItem(item: typeof pantryItems.$inferSelect) {
+  const category = VALID_CATEGORIES.includes(item.category as string)
+    ? item.category
+    : inferCategory(item.canonicalName);
   return {
     id: item.id,
     name: item.name,
     canonicalName: item.canonicalName,
-    category: item.category,
+    category,
     quantity: item.quantity,
     unit: item.unit,
     addedAt: item.addedAt,
@@ -81,6 +86,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
 
+  // Check for existing item with same name and unit — merge quantities
+  const newUnit = body.unit ?? null;
+  const existing = await db
+    .select()
+    .from(pantryItems)
+    .where(
+      and(
+        eq(pantryItems.userId, profile.id),
+        eq(pantryItems.canonicalName, canonicalName)
+      )
+    )
+    .then((rows) =>
+      rows.find((r) => (r.unit ?? null) === newUnit) ?? null
+    );
+
+  if (existing && body.quantity != null) {
+    const mergedQty = (existing.quantity ?? 0) + body.quantity;
+    await db
+      .update(pantryItems)
+      .set({ quantity: mergedQty })
+      .where(eq(pantryItems.id, existing.id));
+    const updated = { ...existing, quantity: mergedQty };
+    return NextResponse.json({ item: serializeItem(updated) });
+  }
+
   const inserted = await db
     .insert(pantryItems)
     .values({
@@ -89,7 +119,7 @@ export async function POST(request: Request) {
       canonicalName,
       category,
       quantity: body.quantity ?? null,
-      unit: body.unit ?? null,
+      unit: newUnit,
       addedAt,
       estimatedExpiry,
       status: computeStatus(estimatedExpiry),
