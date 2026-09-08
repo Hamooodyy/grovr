@@ -118,3 +118,59 @@ export async function deletePantryItem(
     body: JSON.stringify({ id, reason }),
   });
 }
+
+// ── Recipes ──
+
+export interface RecipeIngredient {
+  name: string;
+  quantity: string;
+  unit: string;
+  inPantry: boolean;
+}
+
+export interface RecipeResponse {
+  title: string;
+  description: string;
+  cookTime: string;
+  difficulty: string;
+  servings: number;
+  ingredients: RecipeIngredient[];
+  instructions: string[];
+}
+
+export interface SavedRecipeResponse extends RecipeResponse {
+  id: number;
+  createdAt: string;
+}
+
+export async function suggestRecipes(
+  token: string
+): Promise<{ recipes: RecipeResponse[] }> {
+  return apiFetch("/api/recipes/suggest", token, { method: "POST" });
+}
+
+export async function getSavedRecipes(
+  token: string
+): Promise<{ recipes: SavedRecipeResponse[] }> {
+  return apiFetch("/api/recipes/save", token);
+}
+
+export async function saveRecipe(
+  token: string,
+  recipe: RecipeResponse
+): Promise<{ recipe: SavedRecipeResponse }> {
+  return apiFetch("/api/recipes/save", token, {
+    method: "POST",
+    body: JSON.stringify(recipe),
+  });
+}
+
+export async function deleteSavedRecipe(
+  token: string,
+  id: number
+): Promise<{ success: boolean }> {
+  return apiFetch("/api/recipes/save", token, {
+    method: "DELETE",
+    body: JSON.stringify({ id }),
+  });
+}

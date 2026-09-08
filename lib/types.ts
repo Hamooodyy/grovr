@@ -61,3 +61,27 @@ export interface PantryItem {
   estimatedExpiry: Date | null;
   status: PantryItemStatus;
 }
+
+// ── Recipes ──
+
+export interface RecipeIngredient {
+  name: string;
+  quantity: string;
+  unit: string;
+  inPantry: boolean;
+}
+
+export interface Recipe {
+  title: string;
+  description: string;
+  cookTime: string;
+  difficulty: string;
+  servings: number;
+  ingredients: RecipeIngredient[];
+  instructions: string[];
+}
+
+export interface SavedRecipe extends Recipe {
+  id: number;
+  createdAt: string;
+}

@@ -7,6 +7,7 @@ import {
   index,
   integer,
   real,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 // ── User profiles (onboarding data) ──
@@ -68,4 +69,27 @@ export const pantryItems = pgTable(
     status: text("status").notNull().default("fresh"), // 'fresh' | 'use_soon' | 'urgent' | 'expired'
   },
   (table) => [index("idx_pantry_user").on(table.userId)]
+);
+
+// ── Saved recipes ──
+
+export const savedRecipes = pgTable(
+  "saved_recipes",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => userProfiles.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    cookTime: text("cook_time"),
+    difficulty: text("difficulty"),
+    servings: integer("servings"),
+    ingredients: jsonb("ingredients").notNull(), // Array<{ name, quantity, unit, inPantry }>
+    instructions: jsonb("instructions").notNull(), // string[]
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("idx_saved_recipes_user").on(table.userId)]
 );
