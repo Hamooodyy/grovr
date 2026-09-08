@@ -6,6 +6,7 @@ import {
   timestamp,
   index,
   integer,
+  real,
 } from "drizzle-orm/pg-core";
 
 // ── User profiles (onboarding data) ──
@@ -57,7 +58,9 @@ export const pantryItems = pgTable(
       .references(() => userProfiles.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     canonicalName: text("canonical_name").notNull(),
-    category: text("category"), // 'produce' | 'meat' | 'dairy' | 'grains' | 'pantry_staple' | 'other'
+    category: text("category"), // 'fridge' | 'spice' | 'pantry'
+    quantity: real("quantity"),
+    unit: text("unit"), // 'g' | 'oz' | 'lbs' | 'fl oz' | 'pint' | 'gallon' | 'mL' | 'ct' | 'dozen' | 'pack' | 'bunch'
     addedAt: timestamp("added_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

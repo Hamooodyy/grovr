@@ -67,3 +67,54 @@ export async function updateOnboarding(
     body: JSON.stringify(data),
   });
 }
+
+// ── Pantry ──
+
+export interface PantryItemResponse {
+  id: number;
+  name: string;
+  canonicalName: string;
+  category: "fridge" | "spice" | "pantry";
+  quantity: number | null;
+  unit: string | null;
+  addedAt: string;
+  estimatedExpiry: string | null;
+  status: "fresh" | "use_soon" | "urgent" | "expired";
+}
+
+export async function getPantryItems(
+  token: string
+): Promise<{ items: PantryItemResponse[] }> {
+  return apiFetch("/api/pantry", token);
+}
+
+export async function addPantryItem(
+  token: string,
+  data: { name: string; category?: string; quantity: number; unit: string }
+): Promise<{ item: PantryItemResponse }> {
+  return apiFetch("/api/pantry", token, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updatePantryItem(
+  token: string,
+  data: { id: number; quantity?: number; unit?: string; category?: string }
+): Promise<{ success: boolean }> {
+  return apiFetch("/api/pantry", token, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deletePantryItem(
+  token: string,
+  id: number,
+  reason?: "used" | "expired"
+): Promise<{ success: boolean }> {
+  return apiFetch("/api/pantry", token, {
+    method: "DELETE",
+    body: JSON.stringify({ id, reason }),
+  });
+}

@@ -34,13 +34,20 @@ export interface UserFoodPreference {
 
 export type PantryItemStatus = "fresh" | "use_soon" | "urgent" | "expired";
 
-export type PantryCategory =
-  | "produce"
-  | "meat"
-  | "dairy"
-  | "grains"
-  | "pantry_staple"
-  | "other";
+export type PantryCategory = "fridge" | "spice" | "pantry";
+
+export type PantryUnit =
+  | "g"
+  | "oz"
+  | "lbs"
+  | "fl oz"
+  | "pint"
+  | "gallon"
+  | "mL"
+  | "ct"
+  | "dozen"
+  | "pack"
+  | "bunch";
 
 export interface PantryItem {
   id: number;
@@ -48,6 +55,8 @@ export interface PantryItem {
   name: string;
   canonicalName: string;
   category: PantryCategory | null;
+  quantity: number | null;
+  unit: PantryUnit | null;
   addedAt: Date;
   estimatedExpiry: Date | null;
   status: PantryItemStatus;
