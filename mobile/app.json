@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Grovr",
+    "slug": "grovr",
+    "version": "1.0.0",
+    "scheme": "grovr",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.grovr.mobile"
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store"
+    ]
+  }
+}

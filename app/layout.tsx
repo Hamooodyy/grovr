@@ -12,7 +12,7 @@ const raleway = Raleway({
 
 export const metadata: Metadata = {
   title: "Grovr",
-  description: "Find the cheapest grocery prices near you",
+  description: "Your grocery companion — know what you have, know what to cook",
 };
 
 export default function RootLayout({

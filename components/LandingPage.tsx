@@ -1,6 +1,5 @@
 "use client";
 
-import { SignUpButton } from "@clerk/nextjs";
 import { useEffect, useRef } from "react";
 
 export default function LandingPage() {
@@ -185,27 +184,27 @@ export default function LandingPage() {
             >
               How it works
             </button>
-            <SignUpButton mode="redirect">
-              <button
-                style={{
-                  background: "var(--green)",
-                  color: "white",
-                  border: "none",
-                  padding: "11px 22px",
-                  borderRadius: 11,
-                  fontFamily: "inherit",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-              >
-                Get started
-                <ChevronIcon />
-              </button>
-            </SignUpButton>
+            <a
+              href="#"
+              style={{
+                background: "var(--green)",
+                color: "white",
+                border: "none",
+                padding: "11px 22px",
+                borderRadius: 11,
+                fontFamily: "inherit",
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                textDecoration: "none",
+              }}
+            >
+              Download the app
+              <ChevronIcon />
+            </a>
           </div>
         </nav>
 
@@ -238,7 +237,7 @@ export default function LandingPage() {
               zIndex: 1,
             }}
           >
-            Stop overpaying for groceries.
+            Know what you have. Know what to cook.
           </h1>
 
 
@@ -255,28 +254,28 @@ export default function LandingPage() {
               marginTop: 40,
             }}
           >
-            <SignUpButton mode="redirect">
-              <button
-                style={{
-                  background: "var(--green)",
-                  color: "white",
-                  border: "none",
-                  padding: "16px 32px",
-                  borderRadius: 14,
-                  fontFamily: "inherit",
-                  fontSize: 16,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  boxShadow: "0 4px 20px rgba(22,163,74,0.3)",
-                }}
-              >
-                <CartIcon size={16} color="rgba(255,255,255,0.85)" />
-                Start saving today
-              </button>
-            </SignUpButton>
+            <a
+              href="#"
+              style={{
+                background: "var(--green)",
+                color: "white",
+                border: "none",
+                padding: "16px 32px",
+                borderRadius: 14,
+                fontFamily: "inherit",
+                fontSize: 16,
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                boxShadow: "0 4px 20px rgba(22,163,74,0.3)",
+                textDecoration: "none",
+              }}
+            >
+              <CartIcon size={16} color="rgba(255,255,255,0.85)" />
+              Download on the App Store
+            </a>
             <button
               onClick={() => scrollTo("how-it-works")}
               style={{
@@ -331,7 +330,7 @@ export default function LandingPage() {
               lineHeight: 1.15,
             }}
           >
-            Three steps to a cheaper cart
+            Three steps to smarter cooking
           </h2>
           <p
             className="lp-reveal"
@@ -344,8 +343,8 @@ export default function LandingPage() {
               lineHeight: 1.6,
             }}
           >
-            No app downloads, no switching tabs, no math. Just add your items
-            and we handle the rest.
+            Grovr learns what you have and helps you cook smarter — no
+            spreadsheets, no guesswork.
           </p>
 
           <div
@@ -359,18 +358,18 @@ export default function LandingPage() {
           >
             <StepCard
               index="01"
-              title="Build your list"
-              desc="Search for any item and add it to your list. Prefer a specific brand? Just note it and we'll match accordingly."
+              title="Tell Grovr what you have"
+              desc="Add ingredients to your pantry. Grovr tracks freshness and lets you know what to use soon."
             />
             <StepCard
               index="02"
-              title="We find the best deal"
-              desc="We check every grocery store near you, match each item to the closest product, and tally your total."
+              title="Get personalized recipes"
+              desc="Grovr recommends meals based on what's in your pantry, your preferences, and what needs to be used up."
             />
             <StepCard
               index="03"
-              title="Order with one tap"
-              desc="We send you to the cheapest store's website. Place your order and save."
+              title="Build your shopping list"
+              desc="Missing a few ingredients? One tap adds them to your shopping list."
             />
           </div>
         </section>
@@ -402,7 +401,7 @@ export default function LandingPage() {
                 lineHeight: 1.6,
               }}
             >
-              Fast, simple, and actually useful. No bloat, no subscriptions.
+              Fast, simple, and actually useful. No bloat.
             </p>
             <div
               className="lp-features-grid"
@@ -414,18 +413,18 @@ export default function LandingPage() {
             >
               <FeatureItem
                 icon={<PinIcon color="rgba(255,255,255,0.7)" />}
-                title="Radius search"
-                desc="Adjust how far you're willing to shop. See every store on a live map."
+                title="Smart pantry"
+                desc="Track what you have. See what's fresh, what's expiring, and what you're running low on."
               />
               <FeatureItem
                 icon={<BarChartIcon color="rgba(255,255,255,0.7)" />}
-                title="Price comparison"
-                desc="Full basket totals across all stores, not just individual item prices."
+                title="Personalized recipes"
+                desc="Recommendations based on your pantry, your preferences, and what needs to be used soon."
               />
               <FeatureItem
                 icon={<HeartIcon color="rgba(255,255,255,0.7)" />}
-                title="Brand preferences"
-                desc="Tell us what you like and we'll match to the closest available product."
+                title="Shopping lists"
+                desc="One tap to add missing ingredients from any recipe to your grocery list."
               />
             </div>
           </div>
@@ -469,7 +468,7 @@ export default function LandingPage() {
                 Grovr
               </div>
               <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>
-                Spend less on groceries.
+                Your grocery companion.
               </div>
             </div>
           </div>

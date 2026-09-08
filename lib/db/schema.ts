@@ -2,56 +2,25 @@ import {
   pgTable,
   serial,
   text,
-  integer,
-  numeric,
   boolean,
   timestamp,
   index,
+  integer,
 } from "drizzle-orm/pg-core";
 
-// ---------------------------------------------------------------------------
-// Price snapshots — append-only price history
-// ---------------------------------------------------------------------------
+// ── User profiles (onboarding data) ──
 
-export const priceSnapshots = pgTable(
-  "price_snapshots",
+export const userProfiles = pgTable(
+  "user_profiles",
   {
     id: serial("id").primaryKey(),
-    retailerId: text("retailer_id").notNull(),
-    itemName: text("item_name").notNull(),
-    brandPref: text("brand_pref").notNull().default(""),
-    matchedName: text("matched_name").notNull(),
-    matchedSize: text("matched_size"),
-    price: numeric("price", { precision: 8, scale: 2 }).notNull(),
-    scrapedAt: timestamp("scraped_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    index("idx_price_lookup").on(
-      table.retailerId,
-      table.itemName,
-      table.brandPref,
-      table.scrapedAt
-    ),
-  ]
-);
-
-// ---------------------------------------------------------------------------
-// Shopping lists — multiple named lists per Clerk user, one active at a time
-// ---------------------------------------------------------------------------
-
-export const shoppingLists = pgTable(
-  "shopping_lists",
-  {
-    id: serial("id").primaryKey(),
-    userId: text("user_id").notNull(),
-    name: text("name").notNull().default("My List"),
-    isActive: boolean("is_active").notNull().default(true),
-    estimatedTotal: numeric("estimated_total", { precision: 8, scale: 2 }),
-    recommendedStore: text("recommended_store"),
-    address: text("address"),
-    radius: integer("radius").default(5),
+    clerkUserId: text("clerk_user_id").notNull().unique(),
+    householdType: text("household_type"),
+    cookingFrequency: text("cooking_frequency"),
+    cookingTimes: text("cooking_times").array(),
+    servingSize: text("serving_size"),
+    preferredStore: text("preferred_store"),
+    onboardingDone: boolean("onboarding_done").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -59,27 +28,41 @@ export const shoppingLists = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("idx_shopping_lists_user").on(table.userId)]
+  (table) => [index("idx_user_profiles_clerk").on(table.clerkUserId)]
 );
 
-// ---------------------------------------------------------------------------
-// Shopping list items
-// ---------------------------------------------------------------------------
+// ── Food preferences (likes, dislikes, restrictions) ──
 
-export const shoppingListItems = pgTable(
-  "shopping_list_items",
+export const userFoodPreferences = pgTable(
+  "user_food_preferences",
   {
     id: serial("id").primaryKey(),
-    listId: integer("list_id")
+    userId: integer("user_id")
       .notNull()
-      .references(() => shoppingLists.id, { onDelete: "cascade" }),
-    clientId: text("client_id").notNull(),
-    name: text("name").notNull(),
-    quantity: integer("quantity").notNull().default(1),
-    unit: text("unit").notNull().default("ea"),
-    brandPref: text("brand_pref"),
-    size: text("size"),
-    position: integer("position").notNull().default(0),
+      .references(() => userProfiles.id, { onDelete: "cascade" }),
+    preference: text("preference").notNull(),
+    type: text("type").notNull(), // 'like' | 'dislike' | 'restriction'
   },
-  (table) => [index("idx_list_items").on(table.listId)]
+  (table) => [index("idx_food_prefs_user").on(table.userId)]
+);
+
+// ── Pantry items ──
+
+export const pantryItems = pgTable(
+  "pantry_items",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => userProfiles.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    canonicalName: text("canonical_name").notNull(),
+    category: text("category"), // 'produce' | 'meat' | 'dairy' | 'grains' | 'pantry_staple' | 'other'
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    estimatedExpiry: timestamp("estimated_expiry", { withTimezone: true }),
+    status: text("status").notNull().default("fresh"), // 'fresh' | 'use_soon' | 'urgent' | 'expired'
+  },
+  (table) => [index("idx_pantry_user").on(table.userId)]
 );

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 // ---------------------------------------------------------------------------
-// Open Food Facts search — product autocomplete for the shopping list
+// Open Food Facts search — ingredient autocomplete for pantry + shopping list
 // ---------------------------------------------------------------------------
 
 interface OFFHit {
@@ -22,7 +22,7 @@ async function searchOpenFoodFacts(q: string) {
     `&fields=product_name,brands,image_front_small_url,code`;
 
   const res = await fetch(url, {
-    headers: { "User-Agent": "Grovr/1.0 (grocery price comparison; contact@grovr.app)" },
+    headers: { "User-Agent": "Grovr/2.0 (grocery companion; contact@grovr.app)" },
     signal: AbortSignal.timeout(6000),
     next: { revalidate: 3600 },
   });
