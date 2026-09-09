@@ -1,91 +1,114 @@
 import { useRouter } from "expo-router";
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  SafeAreaView,
-} from "react-native";
+import { View, Text, StyleSheet } from "react-native";
+import { Leaf } from "lucide-react-native";
+import { colors, fonts, type as typ, radii, layout } from "../../lib/theme";
+import { Button } from "../../components/Button";
+
+const BENEFITS = [
+  "Use what you have",
+  "Shop smarter",
+  "Know what to cook",
+] as const;
 
 export default function WelcomeScreen() {
   const router = useRouter();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.emoji}>🥬</Text>
-        <Text style={styles.title}>Welcome to Grovr</Text>
-        <Text style={styles.subtitle}>
-          Know what you have.{"\n"}Know what to cook.
-        </Text>
+        <View style={styles.mark}>
+          <Leaf size={46} strokeWidth={2.75} color={colors.accent2[800]} />
+        </View>
+
+        <Text style={styles.title}>Meet your grocery companion.</Text>
+
         <Text style={styles.body}>
-          We'll ask a few quick questions to personalize your experience — what
-          you like to eat, how you cook, and what's in your kitchen.
+          Grovr learns what you buy, what you like and what you already have — so
+          dinner stops being a decision.
         </Text>
+
+        <View style={styles.benefits}>
+          {BENEFITS.map((text, i) => (
+            <View key={text} style={styles.benefitRow}>
+              <View style={styles.benefitCircle}>
+                <Text style={styles.benefitNum}>{i + 1}</Text>
+              </View>
+              <Text style={styles.benefitText}>{text}</Text>
+            </View>
+          ))}
+        </View>
       </View>
 
       <View style={styles.footer}>
-        <Pressable
-          style={({ pressed }) => [styles.button, pressed && { opacity: 0.7 }]}
+        <Button
+          title="Get started"
           onPress={() => router.push("/(onboarding)/household")}
-        >
-          <Text style={styles.buttonText}>Get started</Text>
-        </Pressable>
+        />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f6fdf8",
+    backgroundColor: colors.bg,
   },
   content: {
     flex: 1,
     justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 32,
+    paddingTop: 74,
+    paddingHorizontal: 28,
   },
-  emoji: {
-    fontSize: 64,
-    marginBottom: 16,
+  mark: {
+    width: 96,
+    height: 96,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent2[200],
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
   },
   title: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: "#0e1f14",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#16a34a",
-    textAlign: "center",
-    marginBottom: 24,
-    lineHeight: 26,
+    ...typ.h1,
+    color: colors.text,
+    marginBottom: 16,
   },
   body: {
+    fontFamily: fonts.body,
     fontSize: 16,
-    color: "#6a7c71",
-    textAlign: "center",
-    lineHeight: 24,
-    paddingHorizontal: 16,
+    lineHeight: 25,
+    color: colors.neutral[700],
+    marginBottom: 32,
+  },
+  benefits: {
+    gap: 14,
+  },
+  benefitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  benefitCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent[200],
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  benefitNum: {
+    fontFamily: fonts.body,
+    fontSize: 13,
+    color: colors.accent[800],
+  },
+  benefitText: {
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: colors.text,
   },
   footer: {
-    paddingHorizontal: 32,
+    paddingHorizontal: 28,
     paddingBottom: 40,
-  },
-  button: {
-    backgroundColor: "#16a34a",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
   },
 });

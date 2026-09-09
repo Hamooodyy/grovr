@@ -1,211 +1,124 @@
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  TextInput,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-} from "react-native";
+import { useState, useMemo } from "react";
+import { View, Text, TextInput, StyleSheet, ScrollView } from "react-native";
+import { colors, fonts, type as typ, radii, layout } from "../../lib/theme";
+import { Button } from "../../components/Button";
+import { OptionRow } from "../../components/OptionRow";
+import { StepHeader } from "../../components/StepHeader";
 
 const POPULAR_STORES = [
-  "Aldi",
-  "Costco",
+  "Trader Joe's",
+  "Whole Foods",
   "Kroger",
   "Publix",
   "Safeway",
   "Target",
-  "Trader Joe's",
-  "Walmart",
+  "Aldi",
+  "Costco",
   "Wegmans",
-  "Whole Foods",
+  "Walmart",
 ] as const;
 
 export default function PreferredStoreScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [selected, setSelected] = useState<string | null>(null);
-  const [customStore, setCustomStore] = useState("");
+  const [query, setQuery] = useState("");
 
-  const store = selected === "__custom" ? customStore.trim() : selected;
-  const canContinue = !!store;
+  const filtered = useMemo(() => {
+    if (!query.trim()) return POPULAR_STORES;
+    const q = query.toLowerCase();
+    return POPULAR_STORES.filter((s) => s.toLowerCase().includes(q));
+  }, [query]);
+
+  const canContinue = !!selected;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backText}>← Back</Text>
-        </Pressable>
+    <View style={styles.container}>
+      <StepHeader step={4} />
 
-        <Text style={styles.step}>Step 4 of 5</Text>
-        <Text style={styles.title}>Where do you shop?</Text>
-        <Text style={styles.subtitle}>
-          Pick your go-to grocery store. You can change this later.
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <Text style={styles.heading}>Where do you usually shop?</Text>
+        <Text style={styles.sub}>
+          Your go-to store. You can change it later.
         </Text>
 
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search stores"
+          placeholderTextColor={colors.neutral[500]}
+          style={styles.searchInput}
+        />
+
         <View style={styles.list}>
-          {POPULAR_STORES.map((name) => (
-            <Pressable
+          {filtered.map((name) => (
+            <OptionRow
               key={name}
-              style={[
-                styles.listItem,
-                selected === name && styles.listItemSelected,
-              ]}
-              onPress={() => {
-                setSelected(name);
-                setCustomStore("");
-              }}
-            >
-              <Text
-                style={[
-                  styles.listLabel,
-                  selected === name && styles.listLabelSelected,
-                ]}
-              >
-                {name}
-              </Text>
-            </Pressable>
+              label={name}
+              selected={selected === name}
+              onPress={() => setSelected(name)}
+            />
           ))}
-
-          <Pressable
-            style={[
-              styles.listItem,
-              selected === "__custom" && styles.listItemSelected,
-            ]}
-            onPress={() => setSelected("__custom")}
-          >
-            <Text
-              style={[
-                styles.listLabel,
-                selected === "__custom" && styles.listLabelSelected,
-              ]}
-            >
-              Other...
-            </Text>
-          </Pressable>
         </View>
-
-        {selected === "__custom" && (
-          <TextInput
-            style={styles.input}
-            placeholder="Type your store name"
-            placeholderTextColor="#6a7c71"
-            value={customStore}
-            onChangeText={setCustomStore}
-            autoFocus
-          />
-        )}
       </ScrollView>
 
       <View style={styles.footer}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            !canContinue && styles.buttonDisabled,
-            pressed && canContinue && { opacity: 0.7 },
-          ]}
+        <Button
+          title="Continue"
+          disabled={!canContinue}
           onPress={() => {
             if (!canContinue) return;
             router.push({
               pathname: "/(onboarding)/pantry-setup",
-              params: { ...params, preferredStore: store },
+              params: { ...params, preferredStore: selected },
             });
           }}
-          disabled={!canContinue}
-        >
-          <Text style={styles.buttonText}>Continue</Text>
-        </Pressable>
+        />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f6fdf8",
+    backgroundColor: colors.bg,
   },
   scroll: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
+    paddingHorizontal: layout.onboardingGutter,
+    paddingTop: 24,
     paddingBottom: 16,
   },
-  backButton: {
-    marginBottom: 12,
-    alignSelf: "flex-start",
-  },
-  backText: {
-    fontSize: 16,
-    color: "#16a34a",
-    fontWeight: "500",
-  },
-  step: {
-    fontSize: 14,
-    color: "#16a34a",
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#0e1f14",
+  heading: {
+    ...typ.h3,
+    color: colors.text,
     marginBottom: 6,
   },
-  subtitle: {
-    fontSize: 15,
-    color: "#6a7c71",
+  sub: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.neutral[700],
     marginBottom: 20,
+  },
+  searchInput: {
+    minHeight: 48,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    borderRadius: radii.pill,
+    paddingHorizontal: 18,
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.text,
+    marginBottom: 16,
   },
   list: {
     gap: 10,
   },
-  listItem: {
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    borderRadius: 12,
-    padding: 16,
-  },
-  listItemSelected: {
-    borderColor: "#16a34a",
-    backgroundColor: "#f0fdf4",
-  },
-  listLabel: {
-    fontSize: 16,
-    color: "#0e1f14",
-  },
-  listLabelSelected: {
-    color: "#16a34a",
-    fontWeight: "600",
-  },
-  input: {
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
-    color: "#0e1f14",
-    marginTop: 12,
-  },
   footer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: layout.onboardingGutter,
     paddingBottom: 40,
-  },
-  button: {
-    backgroundColor: "#16a34a",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-  },
-  buttonDisabled: {
-    opacity: 0.4,
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
   },
 });

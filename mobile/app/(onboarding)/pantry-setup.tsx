@@ -1,18 +1,15 @@
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  TextInput,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-} from "react-native";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { colors, fonts, type as typ, layout } from "../../lib/theme";
+import { Button } from "../../components/Button";
+import { Chip } from "../../components/Chip";
+import { Tag } from "../../components/Tag";
+import { PillInput } from "../../components/PillInput";
+import { StepHeader } from "../../components/StepHeader";
 
 const COMMON_ITEMS = [
   "Chicken breast",
-  "Ground beef",
   "Eggs",
   "Milk",
   "Butter",
@@ -23,36 +20,25 @@ const COMMON_ITEMS = [
   "Olive oil",
   "Onions",
   "Garlic",
-  "Tomatoes",
-  "Potatoes",
-  "Carrots",
-  "Bell peppers",
-  "Broccoli",
   "Spinach",
   "Lemons",
-  "Flour",
+  "Greek yogurt",
+  "Strawberries",
+  "Chickpeas",
 ] as const;
 
-const COMMON_SPICES = [
+const SPICE_ITEMS = [
   "Salt",
   "Black pepper",
   "Garlic powder",
-  "Onion powder",
   "Cumin",
   "Paprika",
-  "Chili powder",
   "Oregano",
-  "Basil",
-  "Cinnamon",
-  "Red pepper flakes",
-  "Turmeric",
   "Italian seasoning",
-  "Bay leaves",
-  "Thyme",
-  "Rosemary",
+  "Red pepper flakes",
 ] as const;
 
-const ALL_QUICK_PICKS = [...COMMON_ITEMS, ...COMMON_SPICES];
+const ALL_QUICK_PICKS = [...COMMON_ITEMS, ...SPICE_ITEMS];
 
 export default function PantrySetupScreen() {
   const router = useRouter();
@@ -74,6 +60,8 @@ export default function PantrySetupScreen() {
     }
   }
 
+  const addedCount = items.length;
+
   function handleContinue() {
     router.push({
       pathname: "/(onboarding)/ready",
@@ -85,268 +73,133 @@ export default function PantrySetupScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      <StepHeader step={5} />
+
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backText}>← Back</Text>
-        </Pressable>
-
-        <Text style={styles.step}>Step 5 of 5</Text>
-        <Text style={styles.title}>What's in your kitchen?</Text>
-        <Text style={styles.subtitle}>
-          Add items you have on hand. This helps us suggest recipes you can make
-          right now.
+        <Text style={styles.heading}>What do you have on hand?</Text>
+        <Text style={styles.sub}>
+          A handful is plenty — Grovr uses it to make your first recommendations
+          real. Half a minute, tops.
         </Text>
 
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. chicken, rice, olive oil"
-            placeholderTextColor="#6a7c71"
-            value={itemText}
-            onChangeText={setItemText}
-            onSubmitEditing={addItem}
-            returnKeyType="done"
-          />
-          <Pressable
-            style={({ pressed }) => [
-              styles.addButton,
-              pressed && { opacity: 0.7 },
-            ]}
-            onPress={addItem}
-          >
-            <Text style={styles.addButtonText}>Add</Text>
-          </Pressable>
-        </View>
+        <PillInput
+          value={itemText}
+          onChangeText={setItemText}
+          onSubmit={addItem}
+          placeholder="Item name (e.g. chicken breast)"
+        />
 
+        {/* Custom items not in quick picks */}
         {items.filter((i) => !ALL_QUICK_PICKS.includes(i as never)).length > 0 && (
-          <>
-            <Text style={styles.sectionLabel}>Your items</Text>
-            <View style={styles.chips}>
-              {items
-                .filter((i) => !ALL_QUICK_PICKS.includes(i as never))
-                .map((item) => (
-                  <Pressable
-                    key={item}
-                    style={styles.selectedChip}
-                    onPress={() => toggleItem(item)}
-                  >
-                    <Text style={styles.selectedChipText}>{item} ✕</Text>
-                  </Pressable>
-                ))}
-            </View>
-          </>
-        )}
-
-        <Text style={[styles.sectionLabel, { marginTop: 24 }]}>
-          Common items
-        </Text>
-        <Text style={styles.sectionHint}>Tap to add what you have</Text>
-        <View style={styles.chips}>
-          {COMMON_ITEMS.map((item) => (
-            <Pressable
-              key={item}
-              style={[
-                styles.spiceChip,
-                items.includes(item) && styles.spiceChipSelected,
-              ]}
-              onPress={() => toggleItem(item)}
-            >
-              <Text
-                style={[
-                  styles.spiceChipText,
-                  items.includes(item) && styles.spiceChipTextSelected,
-                ]}
-              >
-                {item}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <Text style={[styles.sectionLabel, { marginTop: 24 }]}>
-          Spices & seasonings
-        </Text>
-        <View style={styles.chips}>
-          {COMMON_SPICES.map((spice) => (
-            <Pressable
-              key={spice}
-              style={[
-                styles.spiceChip,
-                items.includes(spice) && styles.spiceChipSelected,
-              ]}
-              onPress={() => toggleItem(spice)}
-            >
-              <Text
-                style={[
-                  styles.spiceChipText,
-                  items.includes(spice) && styles.spiceChipTextSelected,
-                ]}
-              >
-                {spice}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {items.length === 0 && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>
-              No items yet — add what you have, or skip for now.
-            </Text>
+          <View style={styles.customTags}>
+            {items
+              .filter((i) => !ALL_QUICK_PICKS.includes(i as never))
+              .map((item) => (
+                <Tag
+                  key={item}
+                  label={item}
+                  variant="accent2"
+                  onRemove={() => toggleItem(item)}
+                />
+              ))}
           </View>
         )}
+
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionLabel}>COMMON ITEMS</Text>
+          {addedCount > 0 && (
+            <Tag label={`${addedCount} added`} variant="accent2" />
+          )}
+        </View>
+        <View style={styles.chips}>
+          {COMMON_ITEMS.map((item) => (
+            <Chip
+              key={item}
+              label={item}
+              selected={items.includes(item)}
+              onPress={() => toggleItem(item)}
+            />
+          ))}
+        </View>
+
+        <Text style={[styles.sectionLabel, { marginTop: 24 }]}>
+          SPICES & SEASONINGS
+        </Text>
+        <View style={styles.chips}>
+          {SPICE_ITEMS.map((item) => (
+            <Chip
+              key={item}
+              label={item}
+              selected={items.includes(item)}
+              onPress={() => toggleItem(item)}
+            />
+          ))}
+        </View>
       </ScrollView>
 
       <View style={styles.footer}>
-        <Pressable
-          style={({ pressed }) => [styles.button, pressed && { opacity: 0.7 }]}
+        <Button
+          title={items.length > 0 ? "Continue with my pantry" : "I'll add items later"}
+          variant={items.length > 0 ? "primary" : "ghost"}
           onPress={handleContinue}
-        >
-          <Text style={styles.buttonText}>
-            {items.length > 0 ? "Continue" : "I'll add items later"}
-          </Text>
-        </Pressable>
+        />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f6fdf8",
+    backgroundColor: colors.bg,
   },
   scroll: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
+    paddingHorizontal: layout.onboardingGutter,
+    paddingTop: 24,
     paddingBottom: 16,
   },
-  backButton: {
-    marginBottom: 12,
-    alignSelf: "flex-start",
-  },
-  backText: {
-    fontSize: 16,
-    color: "#16a34a",
-    fontWeight: "500",
-  },
-  step: {
-    fontSize: 14,
-    color: "#16a34a",
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#0e1f14",
+  heading: {
+    ...typ.h3,
+    color: colors.text,
     marginBottom: 6,
   },
-  subtitle: {
-    fontSize: 15,
-    color: "#6a7c71",
-    marginBottom: 20,
+  sub: {
+    fontFamily: fonts.body,
+    fontSize: 14,
     lineHeight: 22,
+    color: colors.neutral[700],
+    marginBottom: 20,
   },
-  inputRow: {
+  customTags: {
     flexDirection: "row",
-    gap: 10,
-    marginBottom: 16,
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 16,
   },
-  input: {
-    flex: 1,
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
-    color: "#0e1f14",
-  },
-  addButton: {
-    backgroundColor: "#16a34a",
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    justifyContent: "center",
-  },
-  addButtonText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "600",
+  sectionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 24,
+    marginBottom: 12,
   },
   sectionLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#0e1f14",
-    marginBottom: 4,
-  },
-  sectionHint: {
-    fontSize: 13,
-    color: "#6a7c71",
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 12,
+    lineHeight: 14,
+    letterSpacing: 0.96,
+    color: colors.neutral[600],
+    textTransform: "uppercase",
     marginBottom: 12,
   },
   chips: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 8,
-  },
-  selectedChip: {
-    backgroundColor: "#f0fdf4",
-    borderWidth: 1.5,
-    borderColor: "#16a34a",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  selectedChipText: {
-    fontSize: 14,
-    color: "#16a34a",
-    fontWeight: "500",
-  },
-  spiceChip: {
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  spiceChipSelected: {
-    borderColor: "#16a34a",
-    backgroundColor: "#f0fdf4",
-  },
-  spiceChipText: {
-    fontSize: 14,
-    color: "#0e1f14",
-  },
-  spiceChipTextSelected: {
-    color: "#16a34a",
-    fontWeight: "600",
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 24,
-  },
-  emptyText: {
-    fontSize: 15,
-    color: "#6a7c71",
-    textAlign: "center",
+    gap: 9,
   },
   footer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: layout.onboardingGutter,
     paddingBottom: 40,
-  },
-  button: {
-    backgroundColor: "#16a34a",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
   },
 });

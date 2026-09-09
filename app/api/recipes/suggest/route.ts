@@ -21,13 +21,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Optional params: count (default 4), exclude (titles to skip)
+  // Optional params: count (default 4), exclude (titles to skip), ingredient (must-use)
   let recipeCount = 4;
   let excludeTitles: string[] = [];
+  let mustUseIngredient: string | null = null;
   try {
     const body = await request.json();
     if (body.count && typeof body.count === "number") recipeCount = Math.min(body.count, 6);
     if (Array.isArray(body.exclude)) excludeTitles = body.exclude;
+    if (typeof body.ingredient === "string" && body.ingredient.trim()) mustUseIngredient = body.ingredient.trim();
   } catch {
     // No body or invalid JSON — use defaults
   }
@@ -102,7 +104,7 @@ export async function POST(request: Request) {
   const frequency = frequencyMap[profile.cookingFrequency ?? ""] ?? "a few times a week";
 
   const prompt = `You are a home cooking assistant. Suggest ${recipeCount} delicious, real-world recipes that the user would actually want to cook.
-${excludeTitles.length > 0 ? `\nDO NOT suggest any of these recipes (already shown):\n${excludeTitles.map((t) => `- ${t}`).join("\n")}\n` : ""}
+${mustUseIngredient ? `\nIMPORTANT: Every recipe MUST use "${mustUseIngredient}" as a key ingredient. The user specifically wants to cook with this.\n` : ""}${excludeTitles.length > 0 ? `\nDO NOT suggest any of these recipes (already shown):\n${excludeTitles.map((t) => `- ${t}`).join("\n")}\n` : ""}
 
 KITCHEN INVENTORY (what they already have):
 ${pantryList.join("\n")}

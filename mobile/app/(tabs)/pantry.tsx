@@ -9,14 +9,12 @@ import {
   Pressable,
   TextInput,
   StyleSheet,
-  SafeAreaView,
   FlatList,
   ActivityIndicator,
   Alert,
   Modal,
   KeyboardAvoidingView,
   Platform,
-  Animated,
 } from "react-native";
 import { Swipeable, GestureHandlerRootView } from "react-native-gesture-handler";
 import {
@@ -26,63 +24,72 @@ import {
   updatePantryItem,
   type PantryItemResponse,
 } from "../../lib/api";
+import { colors, fonts, type as typ, radii, layout } from "../../lib/theme";
+import { Chip } from "../../components/Chip";
+import { Tag } from "../../components/Tag";
+import { Button } from "../../components/Button";
+import { Toast } from "../../components/Toast";
 
-const CATEGORY_LABELS: Record<string, { label: string; emptyTitle: string; emptyText: string }> = {
-  fridge: { label: "Fridge", emptyTitle: "Your fridge is empty!", emptyText: "Tap \"+ Add\" to stock your fridge." },
-  spice: { label: "Spice Rack", emptyTitle: "Where's the flavor?", emptyText: "Tap \"+ Add\" to add some spices." },
-  pantry: { label: "Pantry", emptyTitle: "You've been raided!", emptyText: "Tap \"+ Add\" to restock your pantry." },
+const CATEGORY_ORDER = ["fridge", "spice", "pantry"] as const;
+
+const CATEGORY_META: Record<string, {
+  label: string;
+  emptyTitle: string;
+  emptyBody: string;
+  addTitle: string;
+}> = {
+  fridge: {
+    label: "Fridge",
+    emptyTitle: "Your fridge is empty!",
+    emptyBody: "Tap \"+ Add\" to stock the fridge — a few things is plenty.",
+    addTitle: "Add to fridge",
+  },
+  spice: {
+    label: "Spice rack",
+    emptyTitle: "Where's the flavour?",
+    emptyBody: "Tap \"+ Add\" to put your everyday spices on the shelf.",
+    addTitle: "Add to spice rack",
+  },
+  pantry: {
+    label: "Pantry",
+    emptyTitle: "You've been raided!",
+    emptyBody: "Tap \"+ Add\" to restock the dry goods.",
+    addTitle: "Add to pantry",
+  },
 };
 
-const CATEGORY_ORDER = ["fridge", "spice", "pantry"];
-
-const STATUS_CONFIG: Record<
-  string,
-  { label: string; color: string; bg: string }
-> = {
-  fresh: { label: "Fresh", color: "#16a34a", bg: "#f0fdf4" },
-  use_soon: { label: "Use soon", color: "#ca8a04", bg: "#fefce8" },
-  urgent: { label: "Use today", color: "#ea580c", bg: "#fff7ed" },
-  expired: { label: "Expired", color: "#dc2626", bg: "#fef2f2" },
+const STATUS_TAG: Record<string, { label: string; variant: "accent" | "accent2" | "neutral" }> = {
+  fresh: { label: "Fresh", variant: "accent2" },
+  use_soon: { label: "Use soon", variant: "accent" },
+  urgent: { label: "Use today", variant: "accent" },
+  expired: { label: "Expired", variant: "neutral" },
 };
 
 const QUANTITIES = [
   0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 24, 32, 48, 64,
 ];
 
-const UNITS = [
-  "ct",
-  "oz",
-  "lbs",
-  "g",
-  "fl oz",
-  "pint",
-  "gallon",
-  "mL",
-  "dozen",
-  "pack",
-  "bunch",
-];
+const UNITS = ["ct", "oz", "lbs", "g", "fl oz", "pint", "gallon", "mL", "dozen", "pack", "bunch"];
 
 export default function PantryScreen() {
   const { getToken } = useAuth();
   const [items, setItems] = useState<PantryItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("fridge");
+  const [toast, setToast] = useState("");
 
-  // Add item state
+  // Add state
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
   const [pickerQty, setPickerQty] = useState(1);
   const [pickerUnit, setPickerUnit] = useState("ct");
+  const [adding, setAdding] = useState(false);
 
-  // Edit quantity state
-  const [editingItem, setEditingItem] = useState<PantryItemResponse | null>(
-    null
-  );
+  // Edit state
+  const [editingItem, setEditingItem] = useState<PantryItemResponse | null>(null);
   const [editQty, setEditQty] = useState(1);
   const [editUnit, setEditUnit] = useState("ct");
   const [editCategory, setEditCategory] = useState("fridge");
-  const [activeTab, setActiveTab] = useState("fridge");
 
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
@@ -93,36 +100,47 @@ export default function PantryScreen() {
       if (!token) return;
       const data = await getPantryItems(token);
       setItems(data.items);
-    } catch {
-      // silently fail
-    } finally {
+    } catch { /* ignore */ } finally {
       setLoading(false);
     }
   }, []);
 
   useFocusEffect(
-    useCallback(() => {
-      fetchItems();
-    }, [fetchItems])
+    useCallback(() => { fetchItems(); }, [fetchItems])
   );
+
+  function getCategory(item: PantryItemResponse): string {
+    return CATEGORY_ORDER.includes(item.category as typeof CATEGORY_ORDER[number])
+      ? item.category
+      : "pantry";
+  }
+
+  const filteredItems = items
+    .filter((i) => getCategory(i) === activeTab)
+    .sort((a, b) => {
+      const ea = a.estimatedExpiry ? new Date(a.estimatedExpiry).getTime() : Infinity;
+      const eb = b.estimatedExpiry ? new Date(b.estimatedExpiry).getTime() : Infinity;
+      return ea - eb;
+    });
+
+  const totalItems = items.length;
 
   async function handleAdd() {
     const trimmed = newName.trim();
     if (!trimmed) return;
     setAdding(true);
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) return;
       const data = await addPantryItem(token, {
         name: trimmed,
+        category: activeTab,
         quantity: pickerQty,
         unit: pickerUnit,
       });
       setItems((prev) => {
         const exists = prev.find((i) => i.id === data.item.id);
-        if (exists) {
-          return prev.map((i) => (i.id === data.item.id ? data.item : i));
-        }
+        if (exists) return prev.map((i) => (i.id === data.item.id ? data.item : i));
         return [...prev, data.item];
       });
       setNewName("");
@@ -140,44 +158,27 @@ export default function PantryScreen() {
 
   async function handleRemove(item: PantryItemResponse) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setItems((prev) => prev.filter((i) => i.id !== item.id));
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) return;
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
       await deletePantryItem(token, item.id, "used");
     } catch {
-      Alert.alert("Error", "Failed to remove item");
       fetchItems();
     }
   }
 
-  function renderLeftActions(
-    _progress: Animated.AnimatedInterpolation<number>,
-    dragX: Animated.AnimatedInterpolation<number>
-  ) {
-    const opacity = dragX.interpolate({
-      inputRange: [0, 60, 80],
-      outputRange: [0, 0.8, 1],
-      extrapolate: "clamp",
-    });
-    return (
-      <Animated.View style={[styles.swipeAction, { opacity }]}>
-        <Text style={styles.swipeActionText}>Remove</Text>
-      </Animated.View>
-    );
-  }
-
-  function openEditQuantity(item: PantryItemResponse) {
+  function openEdit(item: PantryItemResponse) {
     setEditingItem(item);
     setEditQty(item.quantity ?? 1);
     setEditUnit(item.unit ?? "ct");
-    setEditCategory(getItemCategory(item));
+    setEditCategory(getCategory(item));
   }
 
-  async function saveEditQuantity() {
+  async function saveEdit() {
     if (!editingItem) return;
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) return;
       await updatePantryItem(token, {
         id: editingItem.id,
@@ -200,75 +201,72 @@ export default function PantryScreen() {
     }
   }
 
-  function getItemCategory(item: PantryItemResponse): string {
-    return CATEGORY_ORDER.includes(item.category as string) ? item.category! : "pantry";
-  }
-
-  const filteredItems = items
-    .filter((i) => getItemCategory(i) === activeTab)
-    .sort((a, b) => {
-      const expiryA = a.estimatedExpiry ? new Date(a.estimatedExpiry).getTime() : Infinity;
-      const expiryB = b.estimatedExpiry ? new Date(b.estimatedExpiry).getTime() : Infinity;
-      return expiryA - expiryB;
-    });
-
-  const tabCounts = CATEGORY_ORDER.reduce((acc, cat) => {
-    acc[cat] = items.filter((i) => getItemCategory(i) === cat).length;
-    return acc;
-  }, {} as Record<string, number>);
-
-  // Items from onboarding with no quantity
-  const needsQuantity = items.filter((i) => i.quantity == null);
-
-  if (loading) {
+  function renderLeftActions(item: PantryItemResponse) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#16a34a" style={{ flex: 1 }} />
-      </SafeAreaView>
+      <Pressable style={styles.swipeAction} onPress={() => handleRemove(item)}>
+        <Text style={styles.swipeText}>Remove</Text>
+      </Pressable>
     );
   }
 
+  function daysAgo(dateStr: string): string {
+    const diff = Math.round((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24));
+    if (diff === 0) return "today";
+    if (diff === 1) return "1 day ago";
+    return `${diff} days ago`;
+  }
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={colors.accent.DEFAULT} />
+      </View>
+    );
+  }
+
+  const meta = CATEGORY_META[activeTab];
+
   return (
     <GestureHandlerRootView style={styles.container}>
-    <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>My Kitchen</Text>
-        <Pressable
-          style={({ pressed }) => [
-            styles.addHeaderButton,
-            pressed && { opacity: 0.7 },
-          ]}
-          onPress={() => {
-            setNewName("");
-            setPickerQty(1);
-            setPickerUnit("ct");
-            setShowAdd(true);
-          }}
-        >
-          <Text style={styles.addHeaderText}>+ Add</Text>
-        </Pressable>
+        <View style={styles.headerTop}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>My kitchen</Text>
+            <Text style={styles.lead}>
+              {totalItems > 0
+                ? `${totalItems} item${totalItems === 1 ? "" : "s"} · freshness is an estimate`
+                : "Empty for now — add a few things and Grovr starts working."}
+            </Text>
+          </View>
+          <Pressable
+            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
+            onPress={() => { setNewName(""); setPickerQty(1); setPickerUnit("ct"); setShowAdd(true); }}
+          >
+            <Text style={styles.addBtnText}>+ Add</Text>
+          </Pressable>
+        </View>
+
+        {/* Category tabs */}
+        <View style={styles.categoryTabs}>
+          {CATEGORY_ORDER.map((cat) => {
+            const active = activeTab === cat;
+            return (
+              <Pressable
+                key={cat}
+                onPress={() => setActiveTab(cat)}
+                style={[styles.categoryTab, active && styles.categoryTabActive]}
+              >
+                <Text style={[styles.categoryTabText, active && styles.categoryTabTextActive]}>
+                  {CATEGORY_META[cat].label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
-      <View style={styles.tabBar}>
-        {CATEGORY_ORDER.map((cat) => {
-          const info = CATEGORY_LABELS[cat];
-          const active = activeTab === cat;
-          return (
-            <Pressable
-              key={cat}
-              style={[styles.tab, active && styles.tabActive]}
-              onPress={() => setActiveTab(cat)}
-            >
-              <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                {info?.label}
-                {tabCounts[cat] > 0 ? ` (${tabCounts[cat]})` : ""}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* Add item bottom sheet */}
+      {/* Add sheet */}
       <Modal visible={showAdd} transparent animationType="slide">
         <KeyboardAvoidingView
           style={styles.sheetOverlay}
@@ -277,133 +275,84 @@ export default function PantryScreen() {
           <Pressable style={styles.sheetBackdrop} onPress={() => setShowAdd(false)} />
           <View style={styles.sheetContent}>
             <View style={styles.sheetHandle} />
-            <View style={styles.modalHeader}>
-              <Pressable onPress={() => setShowAdd(false)}>
-                <Text style={styles.modalCancel}>Cancel</Text>
-              </Pressable>
-              <Text style={styles.modalTitle}>Add Item</Text>
-              <Pressable
-                onPress={handleAdd}
-                disabled={adding || !newName.trim()}
-              >
-                <Text
-                  style={[
-                    styles.modalSave,
-                    (adding || !newName.trim()) && { opacity: 0.4 },
-                  ]}
+            <Text style={styles.sheetTitle}>{meta?.addTitle ?? "Add item"}</Text>
+            <TextInput
+              style={styles.sheetInput}
+              placeholder="Item name (e.g. chicken breast)"
+              placeholderTextColor={colors.neutral[500]}
+              value={newName}
+              onChangeText={setNewName}
+              autoFocus
+            />
+            <View style={styles.pickerRow}>
+              <View style={styles.pickerCol}>
+                <Text style={styles.pickerLabel}>Qty</Text>
+                <Picker
+                  selectedValue={pickerQty}
+                  onValueChange={setPickerQty}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
                 >
-                  {adding ? "Adding..." : "Add"}
-                </Text>
-              </Pressable>
-            </View>
-            <View style={styles.addSection}>
-              <TextInput
-                style={styles.addInput}
-                placeholder="Item name (e.g. chicken breast)"
-                placeholderTextColor="#6a7c71"
-                value={newName}
-                onChangeText={setNewName}
-                autoFocus
-              />
-              <View style={styles.pickerRow}>
-                <View style={styles.pickerCol}>
-                  <Text style={styles.pickerLabel}>Qty</Text>
-                  <Picker
-                    selectedValue={pickerQty}
-                    onValueChange={setPickerQty}
-                    style={styles.picker}
-                    itemStyle={styles.pickerItem}
-                  >
-                    {QUANTITIES.map((q) => (
-                      <Picker.Item key={q} label={String(q)} value={q} />
-                    ))}
-                  </Picker>
-                </View>
-                <View style={styles.pickerCol}>
-                  <Text style={styles.pickerLabel}>Unit</Text>
-                  <Picker
-                    selectedValue={pickerUnit}
-                    onValueChange={setPickerUnit}
-                    style={styles.picker}
-                    itemStyle={styles.pickerItem}
-                  >
-                    {UNITS.map((u) => (
-                      <Picker.Item key={u} label={u} value={u} />
-                    ))}
-                  </Picker>
-                </View>
+                  {QUANTITIES.map((q) => (
+                    <Picker.Item key={q} label={String(q)} value={q} />
+                  ))}
+                </Picker>
+              </View>
+              <View style={styles.pickerCol}>
+                <Text style={styles.pickerLabel}>Unit</Text>
+                <Picker
+                  selectedValue={pickerUnit}
+                  onValueChange={setPickerUnit}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {UNITS.map((u) => (
+                    <Picker.Item key={u} label={u} value={u} />
+                  ))}
+                </Picker>
               </View>
             </View>
+            <View style={styles.sheetActions}>
+              <Button title={adding ? "Adding..." : "Add item"} onPress={handleAdd} disabled={adding || !newName.trim()} />
+              <Button title="Cancel" variant="secondary" onPress={() => setShowAdd(false)} />
+            </View>
+            <Text style={styles.sheetNote}>
+              Quantity is optional — Grovr estimates from what you cook.
+            </Text>
           </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      {needsQuantity.length > 0 && !showAdd && (
-        <Pressable
-          style={styles.quantityBanner}
-          onPress={() => openEditQuantity(needsQuantity[0])}
-        >
-          <Text style={styles.bannerText}>
-            {needsQuantity.length} item{needsQuantity.length > 1 ? "s" : ""}{" "}
-            need quantities — tap to set
-          </Text>
-        </Pressable>
-      )}
-
+      {/* Items */}
       {filteredItems.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>
-            {CATEGORY_LABELS[activeTab]?.emptyTitle ?? "Nothing here yet"}
-          </Text>
-          <Text style={styles.emptyText}>
-            {CATEGORY_LABELS[activeTab]?.emptyText ?? "Tap \"+ Add\" to get started."}
-          </Text>
+        <View style={styles.center}>
+          <Text style={styles.emptyTitle}>{meta?.emptyTitle}</Text>
+          <Text style={styles.emptyBody}>{meta?.emptyBody}</Text>
         </View>
       ) : (
         <FlatList
           data={filteredItems}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => {
-            const status = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.fresh;
+            const st = STATUS_TAG[item.status] ?? STATUS_TAG.fresh;
             const hasQty = item.quantity != null && item.unit;
-            const qtyLabel = hasQty
-              ? `${item.quantity} ${item.unit}`
-              : "Set qty";
+            const subLine = hasQty
+              ? `${item.quantity} ${item.unit} · added ${daysAgo(item.addedAt)}`
+              : item.category === "spice"
+              ? "Staple"
+              : `added ${daysAgo(item.addedAt)}`;
 
             return (
               <Swipeable
-                renderLeftActions={renderLeftActions}
-                onSwipeableOpen={(direction) => {
-                  if (direction === "left") handleRemove(item);
-                }}
-                leftThreshold={80}
+                renderLeftActions={() => renderLeftActions(item)}
                 overshootLeft={false}
               >
-                <Pressable
-                  style={styles.itemRow}
-                  onPress={() => openEditQuantity(item)}
-                >
-                  <View style={styles.itemLeft}>
+                <Pressable style={styles.itemRow} onPress={() => openEdit(item)}>
+                  <View style={{ flex: 1 }}>
                     <Text style={styles.itemName}>{item.name}</Text>
-                    <Text
-                      style={[
-                        styles.itemQty,
-                        !hasQty && { color: "#ea580c", fontStyle: "italic" },
-                      ]}
-                    >
-                      {qtyLabel}
-                    </Text>
+                    <Text style={styles.itemSub}>{subLine}</Text>
                   </View>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: status.bg },
-                    ]}
-                  >
-                    <Text style={[styles.statusText, { color: status.color }]}>
-                      {status.label}
-                    </Text>
-                  </View>
+                  <Tag label={st.label} variant={st.variant} />
                 </Pressable>
               </Swipeable>
             );
@@ -412,38 +361,31 @@ export default function PantryScreen() {
         />
       )}
 
-      {/* Edit quantity bottom sheet */}
+      {/* Disclaimer */}
+      {filteredItems.length > 0 && (
+        <Text style={styles.disclaimer}>
+          Freshness is estimated from when an item arrived and how it's usually
+          kept. Trust your eyes and nose first.
+        </Text>
+      )}
+
+      {/* Edit sheet */}
       <Modal visible={editingItem !== null} transparent animationType="slide">
         <View style={styles.sheetOverlay}>
           <Pressable style={styles.sheetBackdrop} onPress={() => setEditingItem(null)} />
           <View style={styles.sheetContent}>
             <View style={styles.sheetHandle} />
-            <View style={styles.modalHeader}>
-              <Pressable onPress={() => setEditingItem(null)}>
-                <Text style={styles.modalCancel}>Cancel</Text>
-              </Pressable>
-              <Text style={styles.modalTitle}>
-                {editingItem?.name ?? "Edit"}
-              </Text>
-              <Pressable onPress={saveEditQuantity}>
-                <Text style={styles.modalSave}>Save</Text>
-              </Pressable>
-            </View>
-            <View style={styles.categoryRow}>
-              {CATEGORY_ORDER.map((cat) => {
-                const active = editCategory === cat;
-                return (
-                  <Pressable
-                    key={cat}
-                    style={[styles.categoryChip, active && styles.categoryChipActive]}
-                    onPress={() => setEditCategory(cat)}
-                  >
-                    <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
-                      {CATEGORY_LABELS[cat]?.label ?? cat}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            <Text style={styles.sheetTitle}>{editingItem?.name ?? "Edit"}</Text>
+            <View style={styles.editCategoryRow}>
+              {CATEGORY_ORDER.map((cat) => (
+                <Chip
+                  key={cat}
+                  label={CATEGORY_META[cat].label}
+                  selected={editCategory === cat}
+                  onPress={() => setEditCategory(cat)}
+                  style={{ flex: 1, alignItems: "center" }}
+                />
+              ))}
             </View>
             <View style={styles.pickerRow}>
               <View style={styles.pickerCol}>
@@ -473,10 +415,15 @@ export default function PantryScreen() {
                 </Picker>
               </View>
             </View>
+            <View style={styles.sheetActions}>
+              <Button title="Save" onPress={saveEdit} />
+              <Button title="Cancel" variant="secondary" onPress={() => setEditingItem(null)} />
+            </View>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+
+      <Toast message={toast} visible={!!toast} onDismiss={() => setToast("")} />
     </GestureHandlerRootView>
   );
 }
@@ -484,178 +431,138 @@ export default function PantryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f6fdf8",
+    backgroundColor: colors.bg,
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#0e1f14",
-  },
-  addHeaderButton: {
-    backgroundColor: "#16a34a",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  addHeaderText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  tabBar: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    gap: 8,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    alignItems: "center",
-  },
-  tabActive: {
-    backgroundColor: "#f0fdf4",
-    borderColor: "#16a34a",
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#6a7c71",
-  },
-  tabTextActive: {
-    color: "#16a34a",
-    fontWeight: "700",
-  },
-  addSection: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
-  },
-  addInput: {
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
-    color: "#0e1f14",
-    marginBottom: 8,
-  },
-  pickerRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  pickerCol: {
-    flex: 1,
-    alignItems: "center",
-  },
-  pickerLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#6a7c71",
-    marginBottom: 4,
-  },
-  picker: {
-    width: "100%",
-    height: 150,
-  },
-  pickerItem: {
-    fontSize: 18,
-    color: "#0e1f14",
-  },
-  quantityBanner: {
-    backgroundColor: "#fff7ed",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#fed7aa",
-  },
-  bannerText: {
-    fontSize: 14,
-    color: "#ea580c",
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  empty: {
+  center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 32,
   },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#0e1f14",
-    marginBottom: 8,
+  header: {
+    paddingTop: 66,
+    paddingHorizontal: layout.screenGutter,
+    paddingBottom: 8,
   },
-  emptyText: {
-    fontSize: 15,
-    color: "#6a7c71",
-    textAlign: "center",
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 14,
   },
+  title: {
+    ...typ.h2,
+    color: colors.text,
+  },
+  lead: {
+    fontFamily: fonts.body,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.neutral[600],
+    marginTop: 2,
+  },
+  addBtn: {
+    minHeight: 44,
+    backgroundColor: colors.accent.DEFAULT,
+    borderRadius: radii.pill,
+    paddingHorizontal: 16,
+    justifyContent: "center",
+  },
+  addBtnText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 14,
+    color: colors.bg,
+  },
+  categoryTabs: {
+    flexDirection: "row",
+    gap: 8,
+    backgroundColor: colors.neutral[200],
+    borderRadius: radii.pill,
+    padding: 4,
+  },
+  categoryTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: radii.pill,
+    alignItems: "center",
+  },
+  categoryTabActive: {
+    backgroundColor: colors.accent.DEFAULT,
+  },
+  categoryTabText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 14,
+    color: colors.neutral[600],
+  },
+  categoryTabTextActive: {
+    color: colors.bg,
+  },
+  // Items
   listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingHorizontal: layout.screenGutter,
+    paddingBottom: 16,
   },
   itemRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "white",
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#e8f0eb",
+    backgroundColor: colors.surface,
+    borderRadius: 26,
+    paddingVertical: 13,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    marginBottom: 8,
+    gap: 10,
   },
+  itemName: {
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: colors.text,
+  },
+  itemSub: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.neutral[600],
+    marginTop: 1,
+  },
+  // Swipe
   swipeAction: {
-    backgroundColor: "#dc2626",
+    backgroundColor: colors.accent.DEFAULT,
     justifyContent: "center",
     alignItems: "flex-start",
     paddingLeft: 20,
-    borderRadius: 12,
+    borderRadius: 26,
     marginBottom: 8,
     width: 100,
   },
-  swipeActionText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "700",
+  swipeText: {
+    fontFamily: fonts.bodySemiBold,
+    color: colors.bg,
+    fontSize: 14,
   },
-  itemLeft: {
-    flex: 1,
+  // Empty
+  emptyTitle: {
+    ...typ.h4,
+    color: colors.text,
+    marginBottom: 8,
   },
-  itemName: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#0e1f14",
+  emptyBody: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.neutral[600],
+    textAlign: "center",
   },
-  itemQty: {
-    fontSize: 13,
-    color: "#6a7c71",
-    marginTop: 2,
-  },
-  statusBadge: {
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  statusText: {
+  // Disclaimer
+  disclaimer: {
+    fontFamily: fonts.body,
     fontSize: 12,
-    fontWeight: "600",
+    lineHeight: 18,
+    color: colors.neutral[600],
+    textAlign: "center",
+    paddingHorizontal: layout.screenGutter,
+    paddingBottom: 12,
   },
+  // Sheets
   sheetOverlay: {
     flex: 1,
     justifyContent: "flex-end",
@@ -669,70 +576,76 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
   },
   sheetContent: {
-    backgroundColor: "#f6fdf8",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingBottom: 34,
+    backgroundColor: colors.bg,
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
+    paddingBottom: 40,
+    paddingHorizontal: layout.screenGutter,
   },
   sheetHandle: {
     width: 36,
     height: 5,
     borderRadius: 3,
-    backgroundColor: "#c4d4cb",
+    backgroundColor: colors.neutral[400],
     alignSelf: "center",
+    marginTop: 10,
+    marginBottom: 14,
+  },
+  sheetTitle: {
+    ...typ.h4,
+    color: colors.text,
+    marginBottom: 12,
+  },
+  sheetInput: {
+    minHeight: 48,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    borderRadius: radii.pill,
+    paddingHorizontal: 18,
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.text,
+    marginBottom: 8,
+  },
+  sheetActions: {
+    gap: 8,
     marginTop: 8,
+  },
+  sheetNote: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.neutral[600],
+    textAlign: "center",
+    marginTop: 10,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  pickerCol: {
+    flex: 1,
+    alignItems: "center",
+  },
+  pickerLabel: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 13,
+    color: colors.neutral[600],
     marginBottom: 4,
   },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ddeee4",
+  picker: {
+    width: "100%",
+    height: 150,
   },
-  categoryRow: {
+  pickerItem: {
+    fontFamily: fonts.body,
+    fontSize: 18,
+    color: colors.text,
+  },
+  editCategoryRow: {
     flexDirection: "row",
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 4,
     gap: 8,
-  },
-  categoryChip: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    alignItems: "center",
-  },
-  categoryChipActive: {
-    backgroundColor: "#f0fdf4",
-    borderColor: "#16a34a",
-  },
-  categoryChipText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#6a7c71",
-  },
-  categoryChipTextActive: {
-    color: "#16a34a",
-    fontWeight: "700",
-  },
-  modalCancel: {
-    fontSize: 16,
-    color: "#6a7c71",
-  },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#0e1f14",
-  },
-  modalSave: {
-    fontSize: 16,
-    color: "#16a34a",
-    fontWeight: "600",
+    marginBottom: 12,
   },
 });

@@ -1,32 +1,26 @@
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  TextInput,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-} from "react-native";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { colors, fonts, type as typ, layout } from "../../lib/theme";
+import { Button } from "../../components/Button";
+import { Chip } from "../../components/Chip";
+import { Tag } from "../../components/Tag";
+import { PillInput } from "../../components/PillInput";
+import { StepHeader } from "../../components/StepHeader";
 
 const FOOD_LIKES = [
-  "Italian",
+  "Chicken",
+  "Beef",
+  "Seafood",
+  "Vegetables",
+  "Pasta",
+  "Rice",
   "Mexican",
   "Asian",
   "Mediterranean",
-  "American",
-  "Indian",
-  "Japanese",
-  "Thai",
-  "French",
-  "Korean",
-  "Middle Eastern",
-  "Soul Food",
-  "Vegetarian",
-  "Seafood",
-  "BBQ / Grilling",
-  "Comfort Food",
+  "Italian",
+  "Healthy & light",
+  "Comfort food",
 ] as const;
 
 export default function FoodPreferencesScreen() {
@@ -53,97 +47,63 @@ export default function FoodPreferencesScreen() {
     }
   }
 
-  function removeDislike(item: string) {
-    setDislikes((prev) => prev.filter((d) => d !== item));
-  }
-
   const canContinue = likes.length > 0;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backText}>← Back</Text>
-        </Pressable>
+    <View style={styles.container}>
+      <StepHeader step={2} />
 
-        <Text style={styles.step}>Step 2 of 5</Text>
-        <Text style={styles.title}>What do you like to eat?</Text>
-        <Text style={styles.subtitle}>
-          Pick as many as you want. This shapes your recipe recommendations.
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <Text style={styles.heading}>What do you like to eat?</Text>
+        <Text style={styles.sub}>
+          Pick as many as you want — this shapes your recommendations.
         </Text>
 
         <View style={styles.chips}>
           {FOOD_LIKES.map((item) => (
-            <Pressable
+            <Chip
               key={item}
-              style={[
-                styles.chip,
-                likes.includes(item) && styles.chipSelected,
-              ]}
+              label={item}
+              selected={likes.includes(item)}
               onPress={() => toggleLike(item)}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  likes.includes(item) && styles.chipTextSelected,
-                ]}
-              >
-                {item}
-              </Text>
-            </Pressable>
+            />
           ))}
         </View>
 
-        <Text style={[styles.title, { marginTop: 32 }]}>
+        <Text style={[styles.heading, { marginTop: 32 }]}>
           Anything you don't eat?
         </Text>
-        <Text style={styles.subtitle}>
-          Allergies, restrictions, or foods you dislike. (Optional)
+        <Text style={styles.sub}>
+          Allergies, restrictions or plain dislikes. Optional.
         </Text>
 
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. shellfish, gluten, cilantro"
-            placeholderTextColor="#6a7c71"
-            value={dislikeText}
-            onChangeText={setDislikeText}
-            onSubmitEditing={addDislike}
-            returnKeyType="done"
-          />
-          <Pressable
-            style={({ pressed }) => [
-              styles.addButton,
-              pressed && { opacity: 0.7 },
-            ]}
-            onPress={addDislike}
-          >
-            <Text style={styles.addButtonText}>Add</Text>
-          </Pressable>
-        </View>
+        <PillInput
+          value={dislikeText}
+          onChangeText={setDislikeText}
+          onSubmit={addDislike}
+          placeholder="e.g. shellfish, gluten, cilantro"
+        />
 
         {dislikes.length > 0 && (
-          <View style={styles.chips}>
+          <View style={styles.dislikeTags}>
             {dislikes.map((item) => (
-              <Pressable
+              <Tag
                 key={item}
-                style={styles.dislikeChip}
-                onPress={() => removeDislike(item)}
-              >
-                <Text style={styles.dislikeChipText}>{item} ✕</Text>
-              </Pressable>
+                label={item}
+                variant="accent"
+                onRemove={() =>
+                  setDislikes((prev) => prev.filter((d) => d !== item))
+                }
+              />
             ))}
           </View>
         )}
       </ScrollView>
 
       <View style={styles.footer}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            !canContinue && styles.buttonDisabled,
-            pressed && canContinue && { opacity: 0.7 },
-          ]}
+        <Button
+          title="Continue"
+          disabled={!canContinue}
           onPress={() => {
             if (!canContinue) return;
             router.push({
@@ -155,130 +115,47 @@ export default function FoodPreferencesScreen() {
               },
             });
           }}
-          disabled={!canContinue}
-        >
-          <Text style={styles.buttonText}>Continue</Text>
-        </Pressable>
+        />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f6fdf8",
+    backgroundColor: colors.bg,
   },
   scroll: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
+    paddingHorizontal: layout.onboardingGutter,
+    paddingTop: 24,
     paddingBottom: 16,
   },
-  backButton: {
-    marginBottom: 12,
-    alignSelf: "flex-start",
-  },
-  backText: {
-    fontSize: 16,
-    color: "#16a34a",
-    fontWeight: "500",
-  },
-  step: {
-    fontSize: 14,
-    color: "#16a34a",
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#0e1f14",
+  heading: {
+    ...typ.h3,
+    color: colors.text,
     marginBottom: 6,
   },
-  subtitle: {
-    fontSize: 15,
-    color: "#6a7c71",
+  sub: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.neutral[700],
     marginBottom: 20,
   },
   chips: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
+    gap: 9,
   },
-  chip: {
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  chipSelected: {
-    borderColor: "#16a34a",
-    backgroundColor: "#f0fdf4",
-  },
-  chipText: {
-    fontSize: 14,
-    color: "#0e1f14",
-  },
-  chipTextSelected: {
-    color: "#16a34a",
-    fontWeight: "600",
-  },
-  inputRow: {
+  dislikeTags: {
     flexDirection: "row",
-    gap: 10,
-    marginBottom: 16,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
-    color: "#0e1f14",
-  },
-  addButton: {
-    backgroundColor: "#16a34a",
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    justifyContent: "center",
-  },
-  addButtonText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  dislikeChip: {
-    backgroundColor: "#fef2f2",
-    borderWidth: 1.5,
-    borderColor: "#fecaca",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  dislikeChipText: {
-    fontSize: 14,
-    color: "#dc2626",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 16,
   },
   footer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: layout.onboardingGutter,
     paddingBottom: 40,
-  },
-  button: {
-    backgroundColor: "#16a34a",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-  },
-  buttonDisabled: {
-    opacity: 0.4,
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
   },
 });

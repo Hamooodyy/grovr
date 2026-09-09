@@ -145,7 +145,7 @@ export interface SavedRecipeResponse extends RecipeResponse {
 
 export async function suggestRecipes(
   token: string,
-  options?: { count?: number; exclude?: string[] }
+  options?: { count?: number; exclude?: string[]; ingredient?: string }
 ): Promise<{ recipes: RecipeResponse[] }> {
   return apiFetch("/api/recipes/suggest", token, {
     method: "POST",

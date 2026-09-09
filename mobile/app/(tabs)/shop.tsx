@@ -1,23 +1,19 @@
 import { useAuth } from "@clerk/expo";
 import { useCallback, useRef, useState } from "react";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   View,
   Text,
   Pressable,
-  TextInput,
   StyleSheet,
-  SafeAreaView,
   SectionList,
   ActivityIndicator,
   Alert,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
   Animated,
 } from "react-native";
 import { Swipeable, GestureHandlerRootView } from "react-native-gesture-handler";
+import { ShoppingCart } from "lucide-react-native";
 import {
   getShoppingList,
   addToShoppingList,
@@ -26,16 +22,19 @@ import {
   clearCheckedItems,
   type ShoppingListItem,
 } from "../../lib/api";
+import { colors, fonts, type as typ, radii, layout } from "../../lib/theme";
+import { Button } from "../../components/Button";
+import { PillInput } from "../../components/PillInput";
+import { Toast } from "../../components/Toast";
 
 export default function ShopScreen() {
+  const router = useRouter();
   const { getToken } = useAuth();
   const [items, setItems] = useState<ShoppingListItem[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Add item state
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
-  const [adding, setAdding] = useState(false);
+  const [toast, setToast] = useState("");
 
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
@@ -46,9 +45,7 @@ export default function ShopScreen() {
       if (!token) return;
       const data = await getShoppingList(token);
       setItems(data.items);
-    } catch {
-      // silently fail
-    } finally {
+    } catch { /* ignore */ } finally {
       setLoading(false);
     }
   }, []);
@@ -66,7 +63,7 @@ export default function ShopScreen() {
       prev.map((i) => (i.id === item.id ? { ...i, checked: newChecked } : i))
     );
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) return;
       await toggleShoppingItem(token, item.id, newChecked);
     } catch {
@@ -80,11 +77,10 @@ export default function ShopScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setItems((prev) => prev.filter((i) => i.id !== item.id));
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) return;
       await deleteShoppingItem(token, item.id);
     } catch {
-      Alert.alert("Error", "Failed to remove item");
       fetchItems();
     }
   }
@@ -94,7 +90,7 @@ export default function ShopScreen() {
     if (checkedCount === 0) return;
     Alert.alert(
       "Clear checked items?",
-      `Remove ${checkedCount} checked item${checkedCount > 1 ? "s" : ""} from your list?`,
+      `Remove ${checkedCount} checked item${checkedCount > 1 ? "s" : ""}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -104,13 +100,10 @@ export default function ShopScreen() {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setItems((prev) => prev.filter((i) => !i.checked));
             try {
-              const token = await getToken();
+              const token = await getTokenRef.current();
               if (!token) return;
               await clearCheckedItems(token);
-            } catch {
-              Alert.alert("Error", "Failed to clear items");
-              fetchItems();
-            }
+            } catch { fetchItems(); }
           },
         },
       ]
@@ -120,21 +113,48 @@ export default function ShopScreen() {
   async function handleAdd() {
     const trimmed = newName.trim();
     if (!trimmed) return;
-    setAdding(true);
+    // Dedupe
+    if (items.some((i) => i.name.toLowerCase() === trimmed.toLowerCase())) {
+      setNewName("");
+      return;
+    }
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) return;
       const data = await addToShoppingList(token, [{ name: trimmed }]);
       setItems((prev) => [...prev, ...data.items]);
       setNewName("");
       setShowAdd(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      Alert.alert("Error", "Failed to add item");
-    } finally {
-      setAdding(false);
-    }
+    } catch { /* ignore */ }
   }
+
+  // Group by recipe title, unchecked before checked
+  const sections = (() => {
+    const groups: Record<string, ShoppingListItem[]> = {};
+    const ungrouped: ShoppingListItem[] = [];
+    const sorted = [...items].sort((a, b) => {
+      if (a.checked !== b.checked) return a.checked ? 1 : -1;
+      return 0;
+    });
+    for (const item of sorted) {
+      if (item.recipeTitle) {
+        if (!groups[item.recipeTitle]) groups[item.recipeTitle] = [];
+        groups[item.recipeTitle].push(item);
+      } else {
+        ungrouped.push(item);
+      }
+    }
+    const result: Array<{ title: string; data: ShoppingListItem[] }> = [];
+    if (ungrouped.length > 0) result.push({ title: "Items", data: ungrouped });
+    for (const [title, data] of Object.entries(groups)) {
+      result.push({ title, data });
+    }
+    return result;
+  })();
+
+  const checkedCount = items.filter((i) => i.checked).length;
+  const totalCount = items.length;
 
   function renderRightActions(
     _progress: Animated.AnimatedInterpolation<number>,
@@ -153,11 +173,12 @@ export default function ShopScreen() {
   }
 
   function renderItem({ item }: { item: ShoppingListItem }) {
-    const qty = item.quantity && item.unit
-      ? `${item.quantity} ${item.unit} `
-      : item.quantity
-      ? `${item.quantity} `
-      : "";
+    const qty =
+      item.quantity && item.unit
+        ? `${item.quantity} ${item.unit} `
+        : item.quantity
+        ? `${item.quantity} `
+        : "";
 
     return (
       <Swipeable
@@ -167,160 +188,108 @@ export default function ShopScreen() {
       >
         <Pressable style={styles.itemRow} onPress={() => handleToggle(item)}>
           <View style={[styles.checkbox, item.checked && styles.checkboxChecked]}>
-            {item.checked && <Text style={styles.checkmark}>{'✓'}</Text>}
+            {item.checked && <Text style={styles.checkmark}>✓</Text>}
           </View>
           <Text
-            style={[styles.itemName, item.checked && styles.itemNameChecked]}
+            style={[styles.itemLabel, item.checked && styles.itemLabelChecked]}
             numberOfLines={1}
           >
             {qty}{item.name}
           </Text>
+          <Pressable
+            onPress={() => handleDelete(item)}
+            hitSlop={8}
+            style={styles.deleteBtn}
+          >
+            <Text style={styles.deleteX}>✕</Text>
+          </Pressable>
         </Pressable>
       </Swipeable>
     );
   }
 
-  // Group items by recipe title
-  const sections = (() => {
-    const recipeGroups: Record<string, ShoppingListItem[]> = {};
-    const ungrouped: ShoppingListItem[] = [];
-
-    // Unchecked first, then checked
-    const sorted = [...items].sort((a, b) => {
-      if (a.checked !== b.checked) return a.checked ? 1 : -1;
-      return 0;
-    });
-
-    for (const item of sorted) {
-      if (item.recipeTitle) {
-        if (!recipeGroups[item.recipeTitle]) {
-          recipeGroups[item.recipeTitle] = [];
-        }
-        recipeGroups[item.recipeTitle].push(item);
-      } else {
-        ungrouped.push(item);
-      }
-    }
-
-    const result: Array<{ title: string; data: ShoppingListItem[] }> = [];
-    if (ungrouped.length > 0) {
-      result.push({ title: "Items", data: ungrouped });
-    }
-    for (const [title, data] of Object.entries(recipeGroups)) {
-      result.push({ title, data });
-    }
-    return result;
-  })();
-
-  const checkedCount = items.filter((i) => i.checked).length;
-  const totalCount = items.length;
-
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#16a34a" style={{ flex: 1 }} />
-      </SafeAreaView>
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={colors.accent.DEFAULT} />
+      </View>
     );
   }
 
   return (
     <GestureHandlerRootView style={styles.container}>
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Shopping List</Text>
-          <Pressable
-            style={({ pressed }) => [
-              styles.addHeaderButton,
-              pressed && { opacity: 0.7 },
-            ]}
-            onPress={() => {
-              setNewName("");
-              setShowAdd(true);
-            }}
-          >
-            <Text style={styles.addHeaderText}>+ Add</Text>
-          </Pressable>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.title}>Shopping list</Text>
+          <Text style={styles.summary}>
+            {totalCount === 0
+              ? "Nothing to buy yet."
+              : `${checkedCount} of ${totalCount} checked`}
+          </Text>
         </View>
+        <Pressable
+          style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
+          onPress={() => { setNewName(""); setShowAdd(!showAdd); }}
+        >
+          <Text style={styles.addBtnText}>+ Add</Text>
+        </Pressable>
+      </View>
 
-        {totalCount > 0 && (
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryText}>
-              {checkedCount} of {totalCount} item{totalCount > 1 ? "s" : ""} checked
-            </Text>
-            {checkedCount > 0 && (
-              <Pressable
-                style={({ pressed }) => [pressed && { opacity: 0.7 }]}
-                onPress={handleClearChecked}
-              >
-                <Text style={styles.clearText}>Clear checked</Text>
-              </Pressable>
-            )}
-          </View>
-        )}
+      {showAdd && (
+        <View style={styles.addRow}>
+          <PillInput
+            value={newName}
+            onChangeText={setNewName}
+            onSubmit={handleAdd}
+            placeholder="Item name (e.g. milk)"
+          />
+        </View>
+      )}
 
-        {items.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>Your list is empty</Text>
-            <Text style={styles.emptyText}>
-              Add items manually or tap "Add Missing to List" from a recipe.
-            </Text>
+      {items.length === 0 ? (
+        <View style={styles.center}>
+          <View style={styles.emptyCircle}>
+            <ShoppingCart size={32} strokeWidth={2.75} color={colors.neutral[600]} />
           </View>
-        ) : (
+          <Text style={styles.emptyTitle}>Your list is empty</Text>
+          <Text style={styles.emptyBody}>
+            Add items yourself, or pull the missing ingredients straight out of a
+            recipe.
+          </Text>
+          <Button
+            title="Browse recipes"
+            variant="secondary"
+            onPress={() => router.push("/(tabs)/recipes")}
+            style={{ marginTop: 16 }}
+          />
+        </View>
+      ) : (
+        <>
           <SectionList
             sections={sections}
             keyExtractor={(item) => String(item.id)}
             renderItem={renderItem}
-            renderSectionHeader={({ section: { title } }) => (
+            renderSectionHeader={({ section }) => (
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>{title}</Text>
+                <Text style={styles.sectionLabel}>{section.title.toUpperCase()}</Text>
+                <Text style={styles.sectionCount}>{section.data.length}</Text>
               </View>
             )}
             contentContainerStyle={styles.listContent}
           />
-        )}
-
-        {/* Add item bottom sheet */}
-        <Modal visible={showAdd} transparent animationType="slide">
-          <KeyboardAvoidingView
-            style={styles.sheetOverlay}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-          >
-            <Pressable style={styles.sheetBackdrop} onPress={() => setShowAdd(false)} />
-            <View style={styles.sheetContent}>
-              <View style={styles.sheetHandle} />
-              <View style={styles.modalHeader}>
-                <Pressable onPress={() => setShowAdd(false)}>
-                  <Text style={styles.modalCancel}>Cancel</Text>
-                </Pressable>
-                <Text style={styles.modalTitle}>Add Item</Text>
-                <Pressable
-                  onPress={handleAdd}
-                  disabled={adding || !newName.trim()}
-                >
-                  <Text
-                    style={[
-                      styles.modalSave,
-                      (adding || !newName.trim()) && { opacity: 0.4 },
-                    ]}
-                  >
-                    {adding ? "Adding..." : "Add"}
-                  </Text>
-                </Pressable>
-              </View>
-              <TextInput
-                style={styles.addInput}
-                placeholder="Item name (e.g. milk)"
-                placeholderTextColor="#a3b5aa"
-                value={newName}
-                onChangeText={setNewName}
-                autoFocus
-                returnKeyType="done"
-                onSubmitEditing={handleAdd}
+          {checkedCount > 0 && (
+            <View style={styles.footer}>
+              <Button
+                title={`Clear ${checkedCount} checked`}
+                variant="secondary"
+                onPress={handleClearChecked}
               />
             </View>
-          </KeyboardAvoidingView>
-        </Modal>
-      </SafeAreaView>
+          )}
+        </>
+      )}
+
+      <Toast message={toast} visible={!!toast} onDismiss={() => setToast("")} />
     </GestureHandlerRootView>
   );
 }
@@ -328,186 +297,164 @@ export default function ShopScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f6fdf8",
+    backgroundColor: colors.bg,
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#0e1f14",
-  },
-  addHeaderButton: {
-    backgroundColor: "#16a34a",
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  addHeaderText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-  },
-  summaryText: {
-    fontSize: 14,
-    color: "#6a7c71",
-  },
-  clearText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#dc2626",
-  },
-  empty: {
+  center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 32,
   },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#0e1f14",
-    marginBottom: 8,
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    paddingTop: 66,
+    paddingHorizontal: layout.screenGutter,
+    paddingBottom: 12,
   },
-  emptyText: {
-    fontSize: 15,
-    color: "#6a7c71",
-    textAlign: "center",
-    lineHeight: 22,
+  title: {
+    ...typ.h2,
+    color: colors.text,
   },
-  listContent: {
-    paddingBottom: 40,
+  summary: {
+    fontFamily: fonts.body,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.neutral[600],
+    marginTop: 2,
   },
+  addBtn: {
+    minHeight: 44,
+    backgroundColor: colors.accent.DEFAULT,
+    borderRadius: radii.pill,
+    paddingHorizontal: 16,
+    justifyContent: "center",
+  },
+  addBtnText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 14,
+    color: colors.bg,
+  },
+  addRow: {
+    paddingHorizontal: layout.screenGutter,
+    paddingBottom: 12,
+  },
+  // Section headers
   sectionHeader: {
-    backgroundColor: "#f6fdf8",
-    paddingHorizontal: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: layout.screenGutter,
     paddingTop: 16,
-    paddingBottom: 6,
+    paddingBottom: 8,
   },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#0e1f14",
+  sectionLabel: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 12,
+    lineHeight: 14,
+    letterSpacing: 0.96,
+    color: colors.neutral[600],
+    textTransform: "uppercase",
   },
+  sectionCount: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.neutral[500],
+  },
+  // Item rows
   itemRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "white",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e8f0eb",
+    backgroundColor: colors.surface,
+    borderRadius: radii.pill,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    marginHorizontal: layout.screenGutter,
+    marginBottom: 6,
   },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     borderWidth: 2,
-    borderColor: "#cdddd3",
+    borderColor: colors.neutral[400],
     marginRight: 12,
     justifyContent: "center",
     alignItems: "center",
   },
   checkboxChecked: {
-    backgroundColor: "#16a34a",
-    borderColor: "#16a34a",
+    backgroundColor: colors.accent2[600],
+    borderColor: colors.accent2[600],
   },
   checkmark: {
-    color: "white",
+    fontFamily: fonts.body,
+    color: colors.bg,
     fontSize: 14,
-    fontWeight: "700",
   },
-  itemName: {
-    fontSize: 16,
-    color: "#0e1f14",
+  itemLabel: {
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: colors.text,
     flex: 1,
   },
-  itemNameChecked: {
-    color: "#a3b5aa",
+  itemLabelChecked: {
+    color: colors.neutral[500],
     textDecorationLine: "line-through",
   },
+  deleteBtn: {
+    padding: 6,
+    marginLeft: 8,
+  },
+  deleteX: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.neutral[500],
+  },
+  // Swipe
   swipeAction: {
-    backgroundColor: "#dc2626",
+    backgroundColor: colors.accent.DEFAULT,
     justifyContent: "center",
     alignItems: "center",
     width: 80,
+    marginBottom: 6,
+    marginRight: layout.screenGutter,
+    borderRadius: radii.pill,
   },
   swipeActionText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fonts.bodySemiBold,
+    color: colors.bg,
+    fontSize: 13,
   },
-  // Bottom sheet styles
-  sheetOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
+  // List
+  listContent: {
+    paddingBottom: 20,
   },
-  sheetBackdrop: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.35)",
+  // Footer
+  footer: {
+    paddingHorizontal: layout.screenGutter,
+    paddingBottom: 16,
   },
-  sheetContent: {
-    backgroundColor: "#f6fdf8",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: 40,
-    paddingHorizontal: 20,
-  },
-  sheetHandle: {
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "#cdddd3",
-    alignSelf: "center",
-    marginTop: 10,
-    marginBottom: 12,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  // Empty
+  emptyCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: colors.surface,
     alignItems: "center",
-    marginBottom: 20,
-  },
-  modalCancel: {
-    fontSize: 16,
-    color: "#6a7c71",
-    fontWeight: "500",
-  },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#0e1f14",
-  },
-  modalSave: {
-    fontSize: 16,
-    color: "#16a34a",
-    fontWeight: "600",
-  },
-  addInput: {
-    backgroundColor: "white",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#ddeee4",
-    padding: 14,
-    fontSize: 16,
-    color: "#0e1f14",
+    justifyContent: "center",
     marginBottom: 16,
+  },
+  emptyTitle: {
+    ...typ.h4,
+    color: colors.text,
+    marginBottom: 8,
+  },
+  emptyBody: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.neutral[600],
+    textAlign: "center",
   },
 });

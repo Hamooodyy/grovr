@@ -1,26 +1,23 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-} from "react-native";
+import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
+import { colors, fonts, type as typ, radii, layout } from "../../lib/theme";
+import { Button } from "../../components/Button";
+import { OptionRow } from "../../components/OptionRow";
+import { StepHeader } from "../../components/StepHeader";
 
 const HOUSEHOLD_OPTIONS = [
-  { value: "just_me", label: "Just me", icon: "🧑" },
-  { value: "plus_one", label: "Me + one", icon: "👫" },
-  { value: "family", label: "Family", icon: "👨‍👩‍👧‍👦" },
-  { value: "roommates", label: "Roommates", icon: "🏠" },
+  { value: "just_me", label: "Just me" },
+  { value: "plus_one", label: "Me + one" },
+  { value: "family", label: "Family" },
+  { value: "roommates", label: "Roommates" },
 ] as const;
 
 const FREQUENCY_OPTIONS = [
-  { value: "daily", label: "Every day" },
+  { value: "daily", label: "Almost every day" },
   { value: "few_times", label: "A few times a week" },
-  { value: "once_twice", label: "Once or twice a week" },
-  { value: "not_often", label: "Not very often" },
+  { value: "once_twice", label: "1–2 times a week" },
+  { value: "not_often", label: "Not often" },
 ] as const;
 
 export default function HouseholdScreen() {
@@ -31,29 +28,20 @@ export default function HouseholdScreen() {
   const canContinue = household && frequency;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backText}>← Back</Text>
-        </Pressable>
+    <View style={styles.container}>
+      <StepHeader step={1} />
 
-        <Text style={styles.step}>Step 1 of 5</Text>
-        <Text style={styles.title}>Who's eating?</Text>
-        <Text style={styles.subtitle}>
-          This helps us tailor portions and recipes.
-        </Text>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <Text style={styles.heading}>Who's cooking?</Text>
+        <Text style={styles.sub}>This sizes recipes and portions for you.</Text>
 
         <View style={styles.grid}>
           {HOUSEHOLD_OPTIONS.map((opt) => (
             <Pressable
               key={opt.value}
-              style={[
-                styles.card,
-                household === opt.value && styles.cardSelected,
-              ]}
               onPress={() => setHousehold(opt.value)}
+              style={[styles.card, household === opt.value && styles.cardSelected]}
             >
-              <Text style={styles.cardIcon}>{opt.icon}</Text>
               <Text
                 style={[
                   styles.cardLabel,
@@ -66,40 +54,26 @@ export default function HouseholdScreen() {
           ))}
         </View>
 
-        <Text style={[styles.title, { marginTop: 32 }]}>
+        <Text style={[styles.heading, { marginTop: 32 }]}>
           How often do you cook?
         </Text>
 
         <View style={styles.list}>
           {FREQUENCY_OPTIONS.map((opt) => (
-            <Pressable
+            <OptionRow
               key={opt.value}
-              style={[
-                styles.listItem,
-                frequency === opt.value && styles.listItemSelected,
-              ]}
+              label={opt.label}
+              selected={frequency === opt.value}
               onPress={() => setFrequency(opt.value)}
-            >
-              <Text
-                style={[
-                  styles.listLabel,
-                  frequency === opt.value && styles.listLabelSelected,
-                ]}
-              >
-                {opt.label}
-              </Text>
-            </Pressable>
+            />
           ))}
         </View>
       </ScrollView>
 
       <View style={styles.footer}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            !canContinue && styles.buttonDisabled,
-            pressed && canContinue && { opacity: 0.7 },
-          ]}
+        <Button
+          title="Continue"
+          disabled={!canContinue}
           onPress={() => {
             if (!canContinue) return;
             router.push({
@@ -107,121 +81,69 @@ export default function HouseholdScreen() {
               params: { household, frequency },
             });
           }}
-          disabled={!canContinue}
-        >
-          <Text style={styles.buttonText}>Continue</Text>
-        </Pressable>
+        />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f6fdf8",
+    backgroundColor: colors.bg,
   },
   scroll: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
+    paddingHorizontal: layout.onboardingGutter,
+    paddingTop: 24,
     paddingBottom: 16,
   },
-  backButton: {
-    marginBottom: 12,
-    alignSelf: "flex-start",
-  },
-  backText: {
-    fontSize: 16,
-    color: "#16a34a",
-    fontWeight: "500",
-  },
-  step: {
-    fontSize: 14,
-    color: "#16a34a",
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#0e1f14",
+  heading: {
+    ...typ.h3,
+    color: colors.text,
     marginBottom: 6,
   },
-  subtitle: {
-    fontSize: 15,
-    color: "#6a7c71",
+  sub: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.neutral[700],
     marginBottom: 20,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: 10,
   },
   card: {
     width: "47%",
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    borderRadius: 14,
-    padding: 16,
+    minHeight: 76,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    borderRadius: radii.lg,
     alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
   },
   cardSelected: {
-    borderColor: "#16a34a",
-    backgroundColor: "#f0fdf4",
-  },
-  cardIcon: {
-    fontSize: 32,
-    marginBottom: 8,
+    backgroundColor: colors.accent[100],
+    borderWidth: 2,
+    borderColor: colors.accent.DEFAULT,
   },
   cardLabel: {
+    fontFamily: fonts.body,
     fontSize: 15,
-    fontWeight: "500",
-    color: "#0e1f14",
+    color: colors.text,
   },
   cardLabelSelected: {
-    color: "#16a34a",
-    fontWeight: "600",
+    color: colors.accent[800],
   },
   list: {
     gap: 10,
     marginTop: 16,
   },
-  listItem: {
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    borderRadius: 12,
-    padding: 16,
-  },
-  listItemSelected: {
-    borderColor: "#16a34a",
-    backgroundColor: "#f0fdf4",
-  },
-  listLabel: {
-    fontSize: 16,
-    color: "#0e1f14",
-  },
-  listLabelSelected: {
-    color: "#16a34a",
-    fontWeight: "600",
-  },
   footer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: layout.onboardingGutter,
     paddingBottom: 40,
-  },
-  button: {
-    backgroundColor: "#16a34a",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-  },
-  buttonDisabled: {
-    opacity: 0.4,
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
   },
 });

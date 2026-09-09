@@ -1,19 +1,16 @@
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-} from "react-native";
+import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
+import { colors, fonts, type as typ, radii, layout } from "../../lib/theme";
+import { Button } from "../../components/Button";
+import { OptionRow } from "../../components/OptionRow";
+import { StepHeader } from "../../components/StepHeader";
 
 const TIME_OPTIONS = [
-  { value: "15_20", label: "Quick — under 20 min", icon: "⚡" },
-  { value: "30", label: "Medium — about 30 min", icon: "🍳" },
-  { value: "enjoy", label: "I enjoy cooking — 45-60 min", icon: "👨‍🍳" },
-  { value: "depends", label: "Depends on the day", icon: "🤷" },
+  { value: "15_20", label: "15–20 minutes" },
+  { value: "30", label: "30 minutes" },
+  { value: "45_60", label: "45–60 minutes" },
+  { value: "depends", label: "Depends on the day" },
 ] as const;
 
 const SERVING_OPTIONS = [
@@ -43,62 +40,39 @@ export default function CookingPreferencesScreen() {
   const canContinue = times.length > 0 && servings;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backText}>← Back</Text>
-        </Pressable>
+    <View style={styles.container}>
+      <StepHeader step={3} />
 
-        <Text style={styles.step}>Step 3 of 5</Text>
-        <Text style={styles.title}>How do you like to cook?</Text>
-        <Text style={styles.subtitle}>
-          Pick all the cook times that work for you.
-        </Text>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <Text style={styles.heading}>What's dinner usually like?</Text>
+        <Text style={styles.sub}>Pick every cook time that works.</Text>
 
         <View style={styles.list}>
           {TIME_OPTIONS.map((opt) => (
-            <Pressable
+            <OptionRow
               key={opt.value}
-              style={[
-                styles.listItem,
-                times.includes(opt.value) && styles.listItemSelected,
-              ]}
+              label={opt.label}
+              selected={times.includes(opt.value)}
               onPress={() => toggleTime(opt.value)}
-            >
-              <Text style={styles.listIcon}>{opt.icon}</Text>
-              <Text
-                style={[
-                  styles.listLabel,
-                  times.includes(opt.value) && styles.listLabelSelected,
-                ]}
-              >
-                {opt.label}
-              </Text>
-            </Pressable>
+            />
           ))}
         </View>
 
-        <Text style={[styles.title, { marginTop: 32 }]}>
-          How many servings?
-        </Text>
-        <Text style={styles.subtitle}>
-          We'll size recipes to match.
+        <Text style={[styles.heading, { marginTop: 32 }]}>
+          How much do you usually make?
         </Text>
 
-        <View style={styles.servingGrid}>
+        <View style={styles.grid}>
           {SERVING_OPTIONS.map((opt) => (
             <Pressable
               key={opt.value}
-              style={[
-                styles.servingCard,
-                servings === opt.value && styles.servingCardSelected,
-              ]}
               onPress={() => setServings(opt.value)}
+              style={[styles.card, servings === opt.value && styles.cardSelected]}
             >
               <Text
                 style={[
-                  styles.servingLabel,
-                  servings === opt.value && styles.servingLabelSelected,
+                  styles.cardLabel,
+                  servings === opt.value && styles.cardLabelSelected,
                 ]}
               >
                 {opt.label}
@@ -109,12 +83,9 @@ export default function CookingPreferencesScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            !canContinue && styles.buttonDisabled,
-            pressed && canContinue && { opacity: 0.7 },
-          ]}
+        <Button
+          title="Continue"
+          disabled={!canContinue}
           onPress={() => {
             if (!canContinue) return;
             router.push({
@@ -126,122 +97,69 @@ export default function CookingPreferencesScreen() {
               },
             });
           }}
-          disabled={!canContinue}
-        >
-          <Text style={styles.buttonText}>Continue</Text>
-        </Pressable>
+        />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f6fdf8",
+    backgroundColor: colors.bg,
   },
   scroll: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
+    paddingHorizontal: layout.onboardingGutter,
+    paddingTop: 24,
     paddingBottom: 16,
   },
-  backButton: {
-    marginBottom: 12,
-    alignSelf: "flex-start",
-  },
-  backText: {
-    fontSize: 16,
-    color: "#16a34a",
-    fontWeight: "500",
-  },
-  step: {
-    fontSize: 14,
-    color: "#16a34a",
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#0e1f14",
+  heading: {
+    ...typ.h3,
+    color: colors.text,
     marginBottom: 6,
   },
-  subtitle: {
-    fontSize: 15,
-    color: "#6a7c71",
+  sub: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.neutral[700],
     marginBottom: 20,
   },
   list: {
     gap: 10,
   },
-  listItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-  },
-  listItemSelected: {
-    borderColor: "#16a34a",
-    backgroundColor: "#f0fdf4",
-  },
-  listIcon: {
-    fontSize: 22,
-  },
-  listLabel: {
-    fontSize: 16,
-    color: "#0e1f14",
-  },
-  listLabelSelected: {
-    color: "#16a34a",
-    fontWeight: "600",
-  },
-  servingGrid: {
+  grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
+    marginTop: 16,
   },
-  servingCard: {
+  card: {
     width: "47%",
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    borderRadius: 12,
-    padding: 16,
+    minHeight: 76,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    borderRadius: radii.lg,
     alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
   },
-  servingCardSelected: {
-    borderColor: "#16a34a",
-    backgroundColor: "#f0fdf4",
+  cardSelected: {
+    backgroundColor: colors.accent[100],
+    borderWidth: 2,
+    borderColor: colors.accent.DEFAULT,
   },
-  servingLabel: {
+  cardLabel: {
+    fontFamily: fonts.body,
     fontSize: 15,
-    color: "#0e1f14",
-    fontWeight: "500",
+    color: colors.text,
   },
-  servingLabelSelected: {
-    color: "#16a34a",
-    fontWeight: "600",
+  cardLabelSelected: {
+    color: colors.accent[800],
   },
   footer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: layout.onboardingGutter,
     paddingBottom: 40,
-  },
-  button: {
-    backgroundColor: "#16a34a",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-  },
-  buttonDisabled: {
-    opacity: 0.4,
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
   },
 });

@@ -1,16 +1,17 @@
 import { useAuth } from "@clerk/expo";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState, useEffect } from "react";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  SafeAreaView,
-  ActivityIndicator,
-} from "react-native";
-import { updateOnboarding } from "../../lib/api";
+  updateOnboarding,
+  suggestRecipes,
+  addToShoppingList,
+  RecipeResponse,
+} from "../../lib/api";
 import { useOnboarding } from "../_layout";
+import { colors, fonts, type as typ, radii, shadows, layout } from "../../lib/theme";
+import { Button } from "../../components/Button";
+import { Tag } from "../../components/Tag";
 
 export default function ReadyScreen() {
   const router = useRouter();
@@ -27,22 +28,28 @@ export default function ReadyScreen() {
     pantryItems: string;
   }>();
 
-  const [saving, setSaving] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [recipe, setRecipe] = useState<RecipeResponse | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  const pantryItems: string[] = JSON.parse(params.pantryItems || "[]");
+  const hasPantry = pantryItems.length > 0;
 
   useEffect(() => {
-    saveOnboarding();
+    run();
   }, []);
 
-  async function saveOnboarding() {
+  async function run() {
     try {
+      setLoading(true);
+      setError("");
       const token = await getToken();
       if (!token) throw new Error("Not authenticated");
 
       const likes: string[] = JSON.parse(params.likes || "[]");
       const dislikes: string[] = JSON.parse(params.dislikes || "[]");
       const cookingTimes: string[] = JSON.parse(params.cookingTimes || "[]");
-      const pantryItems: string[] = JSON.parse(params.pantryItems || "[]");
 
       const preferences = [
         ...likes.map((p) => ({ preference: p, type: "like" })),
@@ -64,141 +71,198 @@ export default function ReadyScreen() {
       });
 
       markOnboardingDone();
-      setSaving(false);
+
+      // Fetch first recipe
+      const data = await suggestRecipes(token, { count: 1 });
+      if (data.recipes.length > 0) {
+        setRecipe(data.recipes[0]);
+      }
+
+      setLoading(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to save";
       setError(msg);
-      setSaving(false);
+      setLoading(false);
     }
   }
 
-  if (saving) {
+  async function handleAddMissing() {
+    if (!recipe) return;
+    setAdding(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const missing = recipe.ingredients
+        .filter((i) => !i.inPantry)
+        .map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          unit: i.unit,
+          recipeTitle: recipe.title,
+        }));
+      if (missing.length > 0) {
+        await addToShoppingList(token, missing);
+      }
+      router.replace("/(tabs)/shop");
+    } catch {
+      router.replace("/(tabs)");
+    }
+  }
+
+  if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
-          <ActivityIndicator size="large" color="#16a34a" />
+      <View style={styles.container}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.accent.DEFAULT} />
           <Text style={styles.loadingText}>Setting up your kitchen...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (error) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
-          <Text style={styles.errorIcon}>⚠️</Text>
-          <Text style={styles.title}>Something went wrong</Text>
-          <Text style={styles.errorText}>{error}</Text>
-          <Pressable
-            style={({ pressed }) => [
-              styles.button,
-              pressed && { opacity: 0.7 },
-            ]}
-            onPress={() => {
-              setSaving(true);
-              setError("");
-              saveOnboarding();
-            }}
-          >
-            <Text style={styles.buttonText}>Try again</Text>
-          </Pressable>
+      <View style={styles.container}>
+        <View style={styles.center}>
+          <Text style={styles.errorTitle}>Something went wrong</Text>
+          <Text style={styles.errorBody}>{error}</Text>
+          <Button title="Try again" onPress={run} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
+  const inKitchen = recipe?.ingredients.filter((i) => i.inPantry).length ?? 0;
+  const needToBuy = recipe?.ingredients.filter((i) => !i.inPantry).length ?? 0;
+
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.emoji}>🎉</Text>
-        <Text style={styles.title}>You're all set!</Text>
-        <Text style={styles.subtitle}>
-          Grovr is ready to help you cook smarter. We'll personalize recipes
-          based on what you told us.
+        <Tag
+          label="Based on what we know about you"
+          variant="accent2"
+        />
+
+        <Text style={styles.headline}>
+          {hasPantry ? "Grovr already has an idea." : "No problem — here's a start."}
         </Text>
-        <Text style={styles.hint}>
-          Recipes powered by AI are coming soon — for now, explore your kitchen
-          and start building your pantry.
+        <Text style={styles.sub}>
+          {hasPantry
+            ? "Straight from what you told us and what's on your shelves right now."
+            : "Grovr will learn your kitchen from the groceries you buy. In the meantime, here's something that fits your tastes and your weeknights."}
         </Text>
+
+        {recipe && (
+          <View style={[styles.card, shadows.md]}>
+            <Text style={styles.cardTitle}>{recipe.title}</Text>
+            <Text style={styles.cardMeta}>
+              {recipe.cookTime} · {recipe.difficulty} · {recipe.servings} servings
+            </Text>
+            <View style={styles.cardTags}>
+              <Tag
+                label={`Uses ${inKitchen} you already have`}
+                variant="accent2"
+              />
+              {needToBuy > 0 && (
+                <Tag
+                  label={`Need ${needToBuy} more`}
+                  variant="accent"
+                />
+              )}
+            </View>
+          </View>
+        )}
       </View>
 
       <View style={styles.footer}>
-        <Pressable
-          style={({ pressed }) => [styles.button, pressed && { opacity: 0.7 }]}
+        {recipe && needToBuy > 0 && (
+          <Button
+            title={adding ? "Adding..." : "Add missing ingredients"}
+            onPress={handleAddMissing}
+            disabled={adding}
+          />
+        )}
+        <Button
+          title="Start using Grovr"
+          variant="ghost"
           onPress={() => router.replace("/(tabs)")}
-        >
-          <Text style={styles.buttonText}>Go to Grovr</Text>
-        </Pressable>
+          style={{ marginTop: needToBuy > 0 ? 10 : 0 }}
+        />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f6fdf8",
+    backgroundColor: colors.bg,
   },
-  content: {
+  center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 32,
-  },
-  emoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#0e1f14",
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#6a7c71",
-    textAlign: "center",
-    lineHeight: 24,
-    marginBottom: 16,
-  },
-  hint: {
-    fontSize: 14,
-    color: "#94a3b8",
-    textAlign: "center",
-    lineHeight: 20,
-    fontStyle: "italic",
+    gap: 16,
   },
   loadingText: {
+    fontFamily: fonts.body,
     fontSize: 16,
-    color: "#6a7c71",
-    marginTop: 16,
+    color: colors.neutral[700],
   },
-  errorIcon: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-  errorText: {
-    fontSize: 14,
-    color: "#dc2626",
+  errorTitle: {
+    ...typ.h3,
+    color: colors.text,
     textAlign: "center",
-    marginBottom: 20,
+  },
+  errorBody: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.accent.DEFAULT,
+    textAlign: "center",
+  },
+  content: {
+    flex: 1,
+    paddingTop: 74,
+    paddingHorizontal: layout.onboardingGutter,
+  },
+  headline: {
+    ...typ.h2,
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  sub: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.neutral[700],
+    marginBottom: 28,
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    padding: 13.2,
+    gap: 6,
+  },
+  cardTitle: {
+    ...typ.cardTitleLg,
+    color: colors.text,
+  },
+  cardMeta: {
+    fontFamily: fonts.body,
+    fontSize: 11,
+    lineHeight: 14,
+    color: "rgba(32, 30, 29, 0.5)",
+  },
+  cardTags: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
   },
   footer: {
-    paddingHorizontal: 32,
+    paddingHorizontal: layout.onboardingGutter,
     paddingBottom: 40,
-  },
-  button: {
-    backgroundColor: "#16a34a",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
   },
 });
