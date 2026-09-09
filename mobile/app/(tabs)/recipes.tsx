@@ -29,7 +29,7 @@ import { Tag } from "../../components/Tag";
 import { Chip } from "../../components/Chip";
 import { Button } from "../../components/Button";
 
-const FILTERS = ["For you", "Use it up", "Saved"] as const;
+const FILTERS = ["For you", "Saved"] as const;
 type Filter = (typeof FILTERS)[number];
 
 const LOADING_STAGES = [
@@ -230,22 +230,7 @@ export default function RecipesScreen() {
   const allRecipes: (RecipeResponse | SavedRecipeResponse)[] =
     filter === "Saved" ? saved : recipes;
 
-  const filtered = allRecipes.filter((r) => {
-    if (filter === "Use it up") {
-      const inPantry = r.ingredients.filter((i) => i.inPantry).length;
-      if (inPantry === 0) return false;
-    }
-    return true;
-  });
-
-  function resultCountText(): string {
-    const n = filtered.length;
-    const base = `${n} recipe${n === 1 ? "" : "s"}`;
-    if (filter === "Use it up") return `${base} that lean on what needs using`;
-    if (filter === "Saved") return `${base} you've saved`;
-    if (query.trim() && !searching) return `${base} using "${query.trim()}"`;
-    return base;
-  }
+  const filtered = allRecipes;
 
   function openDetail(recipe: RecipeResponse | SavedRecipeResponse) {
     router.push({
@@ -342,10 +327,6 @@ export default function RecipesScreen() {
     <GestureHandlerRootView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Recipes</Text>
-        <Text style={styles.lead}>
-          Home commits to tonight. This is the whole shelf — filter it however
-          you're feeling.
-        </Text>
 
         {/* Ingredient search — submit to generate recipes */}
         <TextInput
@@ -366,11 +347,10 @@ export default function RecipesScreen() {
               label={f}
               selected={filter === f}
               onPress={() => setFilter(f)}
+              style={{ flex: 1, alignItems: "center" }}
             />
           ))}
         </View>
-
-        <Text style={styles.resultCount}>{resultCountText()}</Text>
       </View>
 
       {!hasGenerated && filtered.length === 0 ? (
@@ -425,13 +405,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 6,
   },
-  lead: {
-    fontFamily: fonts.body,
-    fontSize: 15,
-    lineHeight: 23,
-    color: colors.neutral[700],
-    marginBottom: 16,
-  },
   searchInput: {
     minHeight: 48,
     backgroundColor: colors.surface,
@@ -448,12 +421,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     marginBottom: 10,
-  },
-  resultCount: {
-    fontFamily: fonts.body,
-    fontSize: 13,
-    lineHeight: 20,
-    color: colors.neutral[600],
   },
   // Loading
   loadingText: {

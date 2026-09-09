@@ -15,6 +15,36 @@ const STAPLES = new Set([
   "vinegar", "soy sauce", "hot sauce",
 ]);
 
+const UNIT_ALIASES: Record<string, string> = {
+  tablespoon: "tbsp", tablespoons: "tbsp",
+  teaspoon: "tsp", teaspoons: "tsp",
+  ounce: "oz", ounces: "oz",
+  pound: "lbs", pounds: "lbs", lb: "lbs",
+  gram: "g", grams: "g",
+  cup: "cup", cups: "cup",
+  pint: "pint", pints: "pint",
+  quart: "quart", quarts: "quart",
+  gallon: "gallon", gallons: "gallon",
+  milliliter: "mL", milliliters: "mL", ml: "mL",
+  clove: "clove", cloves: "clove",
+  slice: "slice", slices: "slice",
+  can: "can", cans: "can",
+  stick: "stick", sticks: "stick",
+  head: "head", heads: "head",
+  sprig: "sprig", sprigs: "sprig",
+  bunch: "bunch", bunches: "bunch",
+  dozen: "dozen",
+  pack: "pack", packs: "pack",
+  count: "ct", piece: "ct", pieces: "ct",
+  small: "small", medium: "medium", large: "large",
+  "fl oz": "fl oz", "fluid ounce": "fl oz", "fluid ounces": "fl oz",
+};
+
+function normalizeUnit(unit: string): string {
+  const lower = unit.toLowerCase().trim();
+  return UNIT_ALIASES[lower] ?? lower;
+}
+
 async function getProfile(userId: string) {
   return db
     .select()
@@ -56,6 +86,7 @@ export async function POST(request: Request) {
 
   const deducted: string[] = [];
   const removed: string[] = [];
+  const skipped: Array<{ name: string; pantryUnit: string | null; recipeUnit: string }> = [];
 
   for (const ing of toDeduct) {
     const canonical = ing.name.toLowerCase().trim();
@@ -70,7 +101,8 @@ export async function POST(request: Request) {
 
     const recipeQty = parseFloat(ing.quantity) || 0;
 
-    if (match.unit === ing.unit && match.quantity != null && recipeQty > 0) {
+    const unitsMatch = match.unit && ing.unit && normalizeUnit(match.unit) === normalizeUnit(ing.unit);
+    if (unitsMatch && match.quantity != null && recipeQty > 0) {
       // Units match — subtract
       const remaining = match.quantity - recipeQty;
       if (remaining <= 0) {
@@ -86,13 +118,10 @@ export async function POST(request: Request) {
         deducted.push(match.name);
       }
     } else {
-      // Units don't match or no quantity — remove the item
-      await db
-        .delete(pantryItems)
-        .where(and(eq(pantryItems.id, match.id), eq(pantryItems.userId, profile.id)));
-      removed.push(match.name);
+      // Units don't match or no quantity — skip, don't delete
+      skipped.push({ name: match.name, pantryUnit: match.unit, recipeUnit: ing.unit });
     }
   }
 
-  return NextResponse.json({ deducted, removed });
+  return NextResponse.json({ deducted, removed, skipped });
 }

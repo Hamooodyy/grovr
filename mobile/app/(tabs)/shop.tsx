@@ -290,10 +290,10 @@ export default function ShopScreen() {
             sections={sections}
             keyExtractor={(item) => String(item.id)}
             renderItem={renderItem}
+            stickySectionHeadersEnabled={false}
             renderSectionHeader={({ section }) => (
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionLabel}>{section.title.toUpperCase()}</Text>
-                <Text style={styles.sectionCount}>{section.data.length}</Text>
               </View>
             )}
             contentContainerStyle={styles.listContent}
@@ -377,11 +377,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.96,
     color: colors.neutral[600],
     textTransform: "uppercase",
-  },
-  sectionCount: {
-    fontFamily: fonts.body,
-    fontSize: 12,
-    color: colors.neutral[500],
   },
   // Item rows
   itemRow: {

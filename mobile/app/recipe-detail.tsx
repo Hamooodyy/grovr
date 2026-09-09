@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,9 +8,11 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@clerk/expo";
-import { Check, Plus } from "lucide-react-native";
+import { Check, Plus, AlertTriangle } from "lucide-react-native";
 import {
   RecipeResponse,
+  PantryItemResponse,
+  getPantryItems,
   addToShoppingList,
   deductPantryItems,
   saveRecipe,
@@ -29,9 +31,69 @@ export default function RecipeDetailScreen() {
   const [toast, setToast] = useState("");
   const [addingToList, setAddingToList] = useState(false);
   const [cooking, setCooking] = useState(false);
+  const [pantryItems, setPantryItems] = useState<PantryItemResponse[]>([]);
+
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
+  useEffect(() => {
+    async function loadPantry() {
+      try {
+        const token = await getTokenRef.current();
+        if (!token) return;
+        const data = await getPantryItems(token);
+        setPantryItems(data.items);
+      } catch { /* ignore */ }
+    }
+    loadPantry();
+  }, []);
 
   const inKitchen = recipe.ingredients?.filter((i) => i.inPantry) ?? [];
   const needToBuy = recipe.ingredients?.filter((i) => !i.inPantry) ?? [];
+
+  // Normalize unit aliases so "tablespoon" matches "tbsp", etc.
+  const UNIT_ALIASES: Record<string, string> = {
+    tablespoon: "tbsp", tablespoons: "tbsp",
+    teaspoon: "tsp", teaspoons: "tsp",
+    ounce: "oz", ounces: "oz",
+    pound: "lbs", pounds: "lbs", lb: "lbs",
+    gram: "g", grams: "g",
+    cup: "cup", cups: "cup",
+    pint: "pint", pints: "pint",
+    quart: "quart", quarts: "quart",
+    gallon: "gallon", gallons: "gallon",
+    milliliter: "mL", milliliters: "mL", ml: "mL",
+    clove: "clove", cloves: "clove",
+    slice: "slice", slices: "slice",
+    can: "can", cans: "can",
+    stick: "stick", sticks: "stick",
+    head: "head", heads: "head",
+    sprig: "sprig", sprigs: "sprig",
+    bunch: "bunch", bunches: "bunch",
+    dozen: "dozen",
+    pack: "pack", packs: "pack",
+    count: "ct", piece: "ct", pieces: "ct",
+    small: "small", medium: "medium", large: "large",
+    "fl oz": "fl oz", "fluid ounce": "fl oz", "fluid ounces": "fl oz",
+  };
+
+  function normalizeUnit(unit: string): string {
+    const lower = unit.toLowerCase().trim();
+    return UNIT_ALIASES[lower] ?? lower;
+  }
+
+  // Check for unit mismatches between recipe and pantry
+  function hasUnitMismatch(ingredientName: string, recipeUnit: string): boolean {
+    const canonical = ingredientName.toLowerCase().trim();
+    const match = pantryItems.find(
+      (p) =>
+        p.canonicalName === canonical ||
+        p.canonicalName.includes(canonical) ||
+        canonical.includes(p.canonicalName)
+    );
+    if (!match || !match.unit || !recipeUnit) return false;
+    return normalizeUnit(match.unit) !== normalizeUnit(recipeUnit);
+  }
 
   async function handleAddMissing() {
     if (needToBuy.length === 0) return;
@@ -130,19 +192,39 @@ export default function RecipeDetailScreen() {
         {inKitchen.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>In your kitchen</Text>
-            {inKitchen.map((ing, i) => (
-              <View key={i} style={styles.haveRow}>
-                <Check
-                  size={17}
-                  strokeWidth={2.75}
-                  color={colors.accent2[700]}
-                />
-                <Text style={styles.haveLabel}>{ing.name}</Text>
-                <Text style={styles.haveQty}>
-                  {ing.quantity} {ing.unit}
-                </Text>
-              </View>
-            ))}
+            {inKitchen.map((ing, i) => {
+              const mismatch = hasUnitMismatch(ing.name, ing.unit);
+              return (
+                <View key={i}>
+                  <View style={styles.haveRow}>
+                    <Check
+                      size={17}
+                      strokeWidth={2.75}
+                      color={colors.accent2[700]}
+                    />
+                    <Text style={styles.haveLabel}>{ing.name}</Text>
+                    <Text style={styles.haveQty}>
+                      {ing.quantity} {ing.unit}
+                    </Text>
+                  </View>
+                  {mismatch && (
+                    <Pressable
+                      style={styles.mismatchRow}
+                      onPress={() => router.push("/(tabs)/pantry")}
+                    >
+                      <AlertTriangle
+                        size={13}
+                        strokeWidth={2.75}
+                        color={colors.accent[700]}
+                      />
+                      <Text style={styles.mismatchText}>
+                        Units mismatch — tap to update in My Kitchen
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              );
+            })}
           </View>
         )}
 
@@ -317,6 +399,20 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 13,
     color: colors.neutral[600],
+  },
+  mismatchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingLeft: 42,
+    paddingBottom: 6,
+    marginTop: -2,
+  },
+  mismatchText: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.accent[700],
   },
   // Need to buy rows
   needRow: {

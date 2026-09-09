@@ -207,14 +207,16 @@ export default function HomeScreen() {
                   <Text style={styles.recipeMeta}>
                     {recipe.cookTime} · {recipe.difficulty} · {recipe.servings} servings
                   </Text>
-                  <Text style={styles.recipeHave}>
-                    Uses {inKitchen} thing{inKitchen === 1 ? "" : "s"} you have
-                  </Text>
-                  <Text style={styles.recipeNeed}>
-                    {needMore > 0
-                      ? `Need ${needMore} more`
-                      : "You have everything"}
-                  </Text>
+                  <View style={styles.recipeTags}>
+                    <Tag
+                      label={`${inKitchen} in your kitchen`}
+                      variant="accent2"
+                    />
+                    <Tag
+                      label={needMore > 0 ? `Need ${needMore} more` : "You have everything"}
+                      variant={needMore > 0 ? "accent" : "accent2"}
+                    />
+                  </View>
                 </Card>
               </Pressable>
             );
@@ -343,17 +345,10 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     color: "rgba(32, 30, 29, 0.5)",
   },
-  recipeHave: {
-    fontFamily: fonts.body,
-    fontSize: 13,
-    lineHeight: 20,
-    color: colors.accent2[800],
-  },
-  recipeNeed: {
-    fontFamily: fonts.body,
-    fontSize: 13,
-    lineHeight: 20,
-    color: colors.accent[700],
+  recipeTags: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
   },
   runningLowBlock: {
     backgroundColor: colors.surface,
