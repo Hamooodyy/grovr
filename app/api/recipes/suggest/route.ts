@@ -6,16 +6,30 @@ import { userProfiles, userFoodPreferences, pantryItems, recipeFeedback } from "
 import { eq } from "drizzle-orm";
 import { computeStatus } from "@/lib/freshness";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  timeout: 25000,
+});
 
 /**
  * POST /api/recipes/suggest
  * Uses GPT-4o to suggest recipes based on pantry items and user preferences.
  */
-export async function POST() {
+export async function POST(request: Request) {
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Optional params: count (default 4), exclude (titles to skip)
+  let recipeCount = 4;
+  let excludeTitles: string[] = [];
+  try {
+    const body = await request.json();
+    if (body.count && typeof body.count === "number") recipeCount = Math.min(body.count, 6);
+    if (Array.isArray(body.exclude)) excludeTitles = body.exclude;
+  } catch {
+    // No body or invalid JSON — use defaults
   }
 
   const profile = await db
@@ -87,7 +101,8 @@ export async function POST() {
   };
   const frequency = frequencyMap[profile.cookingFrequency ?? ""] ?? "a few times a week";
 
-  const prompt = `You are a home cooking assistant. Suggest 4 delicious, real-world recipes that the user would actually want to cook.
+  const prompt = `You are a home cooking assistant. Suggest ${recipeCount} delicious, real-world recipes that the user would actually want to cook.
+${excludeTitles.length > 0 ? `\nDO NOT suggest any of these recipes (already shown):\n${excludeTitles.map((t) => `- ${t}`).join("\n")}\n` : ""}
 
 KITCHEN INVENTORY (what they already have):
 ${pantryList.join("\n")}
@@ -136,8 +151,8 @@ Return ONLY valid JSON matching this schema:
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },
       temperature: 0.8,
-      max_tokens: 2000,
-    }, { timeout: 25000 });
+      max_tokens: recipeCount === 1 ? 600 : 2000,
+    });
 
     const content = completion.choices[0]?.message?.content;
     if (!content) {

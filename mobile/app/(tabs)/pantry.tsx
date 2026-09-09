@@ -1,5 +1,5 @@
 import { useAuth } from "@clerk/expo";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { Picker } from "@react-native-picker/picker";
 import * as Haptics from "expo-haptics";
@@ -84,9 +84,12 @@ export default function PantryScreen() {
   const [editCategory, setEditCategory] = useState("fridge");
   const [activeTab, setActiveTab] = useState("fridge");
 
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
   const fetchItems = useCallback(async () => {
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) return;
       const data = await getPantryItems(token);
       setItems(data.items);
@@ -95,7 +98,7 @@ export default function PantryScreen() {
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {

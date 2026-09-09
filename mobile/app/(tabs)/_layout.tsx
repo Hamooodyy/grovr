@@ -13,22 +13,13 @@ export default function TabLayout() {
         tabBarStyle: {
           borderTopColor: "#ddeee4",
         },
-        headerStyle: {
-          backgroundColor: "#f6fdf8",
-        },
-        headerTintColor: "#0e1f14",
-        headerTitleStyle: {
-          fontWeight: "700",
-        },
+        headerShown: false,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen

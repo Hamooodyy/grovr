@@ -1,5 +1,5 @@
 import { useAuth } from "@clerk/expo";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
@@ -37,9 +37,12 @@ export default function ShopScreen() {
   const [newName, setNewName] = useState("");
   const [adding, setAdding] = useState(false);
 
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
   const fetchItems = useCallback(async () => {
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) return;
       const data = await getShoppingList(token);
       setItems(data.items);
@@ -48,7 +51,7 @@ export default function ShopScreen() {
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
