@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import OpenAI from "openai";
 import { db } from "@/lib/db";
-import { userProfiles, userFoodPreferences, pantryItems } from "@/lib/db/schema";
+import { userProfiles, userFoodPreferences, pantryItems, recipeFeedback } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { computeStatus } from "@/lib/freshness";
 
@@ -29,11 +29,12 @@ export async function POST() {
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
 
-  // Fetch pantry items
-  const items = await db
-    .select()
-    .from(pantryItems)
-    .where(eq(pantryItems.userId, profile.id));
+  // Fetch pantry, preferences, and feedback in parallel
+  const [items, preferences, feedback] = await Promise.all([
+    db.select().from(pantryItems).where(eq(pantryItems.userId, profile.id)),
+    db.select().from(userFoodPreferences).where(eq(userFoodPreferences.userId, profile.id)),
+    db.select().from(recipeFeedback).where(eq(recipeFeedback.userId, profile.id)),
+  ]);
 
   if (items.length === 0) {
     return NextResponse.json(
@@ -42,51 +43,74 @@ export async function POST() {
     );
   }
 
-  // Fetch food preferences
-  const preferences = await db
-    .select()
-    .from(userFoodPreferences)
-    .where(eq(userFoodPreferences.userId, profile.id));
-
   const likes = preferences.filter((p) => p.type === "like").map((p) => p.preference);
   const dislikes = preferences.filter((p) => p.type === "dislike").map((p) => p.preference);
   const restrictions = preferences.filter((p) => p.type === "restriction").map((p) => p.preference);
 
-  // Build pantry summary with freshness priority
-  const pantryList = items.map((item) => {
-    const status = item.estimatedExpiry
-      ? computeStatus(item.estimatedExpiry)
-      : "fresh";
-    const qty = item.quantity && item.unit ? `${item.quantity} ${item.unit}` : "";
-    const urgency =
-      status === "expired" ? " [EXPIRED - use immediately or discard]" :
-      status === "urgent" ? " [USE TODAY]" :
-      status === "use_soon" ? " [use soon]" : "";
-    return `- ${item.name}${qty ? ` (${qty})` : ""}${urgency}`;
-  });
+  const likedRecipes = feedback.filter((f) => f.feedback === "like").map((f) => f.recipeTitle);
+  const dislikedRecipes = feedback.filter((f) => f.feedback === "dislike").map((f) => f.recipeTitle);
+
+  // Build pantry summary — exclude expired items entirely
+  const pantryList = items
+    .filter((item) => {
+      const status = item.estimatedExpiry ? computeStatus(item.estimatedExpiry) : "fresh";
+      return status !== "expired";
+    })
+    .map((item) => {
+      const status = item.estimatedExpiry ? computeStatus(item.estimatedExpiry) : "fresh";
+      const qty = item.quantity && item.unit ? `${item.quantity} ${item.unit}` : "";
+      const urgency =
+        status === "urgent" ? " [USE TODAY]" :
+        status === "use_soon" ? " [use soon]" : "";
+      return `- ${item.name}${qty ? ` (${qty})` : ""}${urgency}`;
+    });
 
   const servings = profile.servingSize === "5_plus" ? "5+"
     : profile.servingSize === "3_4" ? "3-4"
     : profile.servingSize ?? "2";
 
-  const prompt = `You are a home cooking assistant. Suggest 4 recipes based on what the user has in their kitchen.
+  const cookTimeMap: Record<string, string> = {
+    "15_20": "quick meals under 20 minutes",
+    "30": "about 30 minutes",
+    "enjoy": "45-60 minutes (enjoys cooking)",
+    "depends": "flexible",
+  };
+  const cookTimes = (profile.cookingTimes ?? [])
+    .map((t) => cookTimeMap[t] ?? t)
+    .join(", ");
 
-KITCHEN INVENTORY:
+  const frequencyMap: Record<string, string> = {
+    daily: "every day",
+    few_times: "a few times a week",
+    once_twice: "once or twice a week",
+    not_often: "not very often",
+  };
+  const frequency = frequencyMap[profile.cookingFrequency ?? ""] ?? "a few times a week";
+
+  const prompt = `You are a home cooking assistant. Suggest 4 delicious, real-world recipes that the user would actually want to cook.
+
+KITCHEN INVENTORY (what they already have):
 ${pantryList.join("\n")}
 
-USER PREFERENCES:
-- Servings: ${servings}
-- Cooking frequency: ${profile.cookingFrequency ?? "a few times a week"}
-${likes.length > 0 ? `- Likes: ${likes.join(", ")}` : ""}
-${dislikes.length > 0 ? `- Dislikes (avoid these): ${dislikes.join(", ")}` : ""}
+USER PROFILE:
+- Serves: ${servings} people
+- Cooks: ${frequency}
+- Preferred cook time: ${cookTimes || "no preference"}
+${likes.length > 0 ? `- Favorite cuisines: ${likes.join(", ")}` : ""}
+${dislikes.length > 0 ? `- Ingredients/foods they HATE (never include these): ${dislikes.join(", ")}` : ""}
 ${restrictions.length > 0 ? `- Dietary restrictions: ${restrictions.join(", ")}` : ""}
+${likedRecipes.length > 0 ? `\nPAST RECIPES THEY LIKED (suggest similar styles):\n${likedRecipes.map((r) => `- ${r}`).join("\n")}` : ""}
+${dislikedRecipes.length > 0 ? `\nPAST RECIPES THEY DISLIKED (avoid similar styles):\n${dislikedRecipes.map((r) => `- ${r}`).join("\n")}` : ""}
 
 RULES:
-- Prioritize ingredients marked [EXPIRED], [USE TODAY], or [use soon] to reduce waste
-- Each recipe should use mostly ingredients from the kitchen inventory
+- Suggest recipes that match their favorite cuisines and cooking style
+- Recipes MUST respect their cook time preference — if they like quick meals, don't suggest a 2-hour braise
+- NEVER include ingredients or foods they hate
+- DO NOT limit yourself to only what's in the kitchen. Use the inventory as a starting point, but freely add whatever ingredients make the recipe great
+- NEVER use expired ingredients. If ingredients are marked [USE TODAY] or [use soon], try to use them in at least 1-2 recipes to reduce waste
+- Mark each ingredient as inPantry: true if it matches something in the inventory above, false if they need to buy it
+- Include a good variety — different cuisines, proteins, and cooking styles
 - Keep it practical — home cooking, not restaurant-level
-- Mark each ingredient as inPantry: true if it's in the inventory, false if they need to buy it
-- Keep missing ingredients to a minimum (1-3 max per recipe)
 - Include accurate quantities for each ingredient
 
 Return ONLY valid JSON matching this schema:
@@ -112,8 +136,8 @@ Return ONLY valid JSON matching this schema:
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },
       temperature: 0.8,
-      max_tokens: 3000,
-    });
+      max_tokens: 2000,
+    }, { timeout: 25000 });
 
     const content = completion.choices[0]?.message?.content;
     if (!content) {

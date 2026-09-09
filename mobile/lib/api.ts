@@ -174,3 +174,98 @@ export async function deleteSavedRecipe(
     body: JSON.stringify({ id }),
   });
 }
+
+// ── Recipe feedback ──
+
+export interface FeedbackItem {
+  id: number;
+  recipeTitle: string;
+  feedback: "like" | "dislike";
+}
+
+export async function getRecipeFeedback(
+  token: string
+): Promise<{ feedback: FeedbackItem[] }> {
+  return apiFetch("/api/recipes/feedback", token);
+}
+
+export async function submitRecipeFeedback(
+  token: string,
+  recipeTitle: string,
+  feedback: "like" | "dislike"
+): Promise<{ created?: boolean; updated?: boolean; removed?: boolean; feedback?: string }> {
+  return apiFetch("/api/recipes/feedback", token, {
+    method: "POST",
+    body: JSON.stringify({ recipeTitle, feedback }),
+  });
+}
+
+// ── Pantry deduct ──
+
+export async function deductPantryItems(
+  token: string,
+  ingredients: RecipeIngredient[]
+): Promise<{ deducted: string[]; removed: string[] }> {
+  return apiFetch("/api/pantry/deduct", token, {
+    method: "POST",
+    body: JSON.stringify({ ingredients }),
+  });
+}
+
+// ── Shopping list ──
+
+export interface ShoppingListItem {
+  id: number;
+  name: string;
+  quantity: string | null;
+  unit: string | null;
+  checked: boolean;
+  recipeTitle: string | null;
+  createdAt: string;
+}
+
+export async function getShoppingList(
+  token: string
+): Promise<{ items: ShoppingListItem[] }> {
+  return apiFetch("/api/shopping-list", token);
+}
+
+export async function addToShoppingList(
+  token: string,
+  items: Array<{ name: string; quantity?: string; unit?: string; recipeTitle?: string }>
+): Promise<{ items: ShoppingListItem[] }> {
+  return apiFetch("/api/shopping-list", token, {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
+}
+
+export async function toggleShoppingItem(
+  token: string,
+  id: number,
+  checked: boolean
+): Promise<{ success: boolean }> {
+  return apiFetch("/api/shopping-list", token, {
+    method: "PATCH",
+    body: JSON.stringify({ id, checked }),
+  });
+}
+
+export async function deleteShoppingItem(
+  token: string,
+  id: number
+): Promise<{ success: boolean }> {
+  return apiFetch("/api/shopping-list", token, {
+    method: "DELETE",
+    body: JSON.stringify({ id }),
+  });
+}
+
+export async function clearCheckedItems(
+  token: string
+): Promise<{ success: boolean }> {
+  return apiFetch("/api/shopping-list", token, {
+    method: "DELETE",
+    body: JSON.stringify({ clearChecked: true }),
+  });
+}

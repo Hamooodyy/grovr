@@ -93,3 +93,42 @@ export const savedRecipes = pgTable(
   },
   (table) => [index("idx_saved_recipes_user").on(table.userId)]
 );
+
+// ── Shopping list ──
+
+export const shoppingListItems = pgTable(
+  "shopping_list_items",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => userProfiles.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    quantity: text("quantity"),
+    unit: text("unit"),
+    checked: boolean("checked").notNull().default(false),
+    recipeTitle: text("recipe_title"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("idx_shopping_list_user").on(table.userId)]
+);
+
+// ── Recipe feedback ──
+
+export const recipeFeedback = pgTable(
+  "recipe_feedback",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => userProfiles.id, { onDelete: "cascade" }),
+    recipeTitle: text("recipe_title").notNull(),
+    feedback: text("feedback").notNull(), // 'like' | 'dislike'
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("idx_recipe_feedback_user").on(table.userId)]
+);
