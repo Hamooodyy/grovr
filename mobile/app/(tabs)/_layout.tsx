@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import { View, StyleSheet } from "react-native";
-import { Home, UtensilsCrossed, ShoppingCart, Leaf } from "lucide-react-native";
+import { Home, UtensilsCrossed, ShoppingCart, Leaf, User } from "lucide-react-native";
 import { colors, fonts, layout } from "../../lib/theme";
 
 const ICON_SIZE = 23;
@@ -26,6 +26,9 @@ export default function TabLayout() {
           paddingTop: 10,
           paddingBottom: 30,
           height: layout.tabBarHeight,
+        },
+        tabBarItemStyle: {
+          flex: 1,
         },
         headerShown: false,
       }}
@@ -55,7 +58,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="shop"
         options={{
-          title: "Shopping list",
+          title: "My list",
           tabBarIcon: ({ focused }) => (
             <View style={focused ? styles.activePill : undefined}>
               <ShoppingCart size={ICON_SIZE} strokeWidth={STROKE} color={focused ? ACTIVE : INACTIVE} />
@@ -70,6 +73,17 @@ export default function TabLayout() {
           tabBarIcon: ({ focused }) => (
             <View style={focused ? styles.activePill : undefined}>
               <Leaf size={ICON_SIZE} strokeWidth={STROKE} color={focused ? ACTIVE : INACTIVE} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
+          tabBarIcon: ({ focused }) => (
+            <View style={focused ? styles.activePill : undefined}>
+              <User size={ICON_SIZE} strokeWidth={STROKE} color={focused ? ACTIVE : INACTIVE} />
             </View>
           ),
         }}

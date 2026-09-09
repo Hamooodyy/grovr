@@ -1,6 +1,7 @@
 import { useAuth } from "@clerk/expo";
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
+import { Picker } from "@react-native-picker/picker";
 import * as Haptics from "expo-haptics";
 import {
   View,
@@ -10,10 +11,12 @@ import {
   SectionList,
   ActivityIndicator,
   Alert,
-  Animated,
+  Modal,
+  Platform,
+  KeyboardAvoidingView,
 } from "react-native";
 import { Swipeable, GestureHandlerRootView } from "react-native-gesture-handler";
-import { ShoppingCart } from "lucide-react-native";
+import { ShoppingCart, Check } from "lucide-react-native";
 import {
   getShoppingList,
   addToShoppingList,
@@ -28,6 +31,17 @@ import { Button } from "../../components/Button";
 import { PillInput } from "../../components/PillInput";
 import { Toast } from "../../components/Toast";
 
+const QUANTITIES = [
+  0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 24, 32, 48, 64,
+];
+const UNITS = [
+  "ct", "small", "medium", "large",
+  "oz", "lbs", "g",
+  "tsp", "tbsp", "cup", "fl oz", "pint", "quart", "gallon", "mL",
+  "clove", "slice", "can", "stick", "head", "sprig",
+  "dozen", "pack", "bunch",
+];
+
 export default function ShopScreen() {
   const router = useRouter();
   const { getToken } = useAuth();
@@ -36,6 +50,11 @@ export default function ShopScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
   const [toast, setToast] = useState("");
+
+  // "Bought extra?" modal state
+  const [extraItem, setExtraItem] = useState<ShoppingListItem | null>(null);
+  const [boughtQty, setBoughtQty] = useState(1);
+  const [boughtUnit, setBoughtUnit] = useState("ct");
 
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
@@ -150,6 +169,56 @@ export default function ShopScreen() {
     } catch { /* ignore */ }
   }
 
+  // "Cooked it" — clear all items in a recipe section
+  async function handleCookedSection(sectionTitle: string) {
+    const sectionItems = items.filter((i) => i.recipeTitle === sectionTitle);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setItems((prev) => prev.filter((i) => i.recipeTitle !== sectionTitle));
+    setToast("Cleared — enjoy your meal");
+    try {
+      const token = await getTokenRef.current();
+      if (!token) return;
+      await Promise.all(sectionItems.map((i) => deleteShoppingItem(token, i.id)));
+    } catch {
+      fetchItems();
+    }
+  }
+
+  // "Bought extra?" — open modal to log total quantity bought
+  function openBoughtExtra(item: ShoppingListItem) {
+    const qty = item.quantity ? parseFloat(item.quantity) : 1;
+    setBoughtQty(isNaN(qty) ? 1 : qty);
+    setBoughtUnit(item.unit || "ct");
+    setExtraItem(item);
+  }
+
+  async function handleBoughtExtra() {
+    if (!extraItem) return;
+    const recipeQty = extraItem.quantity ? parseFloat(extraItem.quantity) : 0;
+    const extra = boughtQty - (isNaN(recipeQty) ? 0 : recipeQty);
+    if (extra <= 0) {
+      setExtraItem(null);
+      return;
+    }
+    try {
+      const token = await getTokenRef.current();
+      if (!token) return;
+      const result = await addPantryItem(token, {
+        name: extraItem.name,
+        quantity: extra,
+        unit: boughtUnit,
+      });
+      const cat = result.item.category;
+      const label = CATEGORY_LABELS[cat] ?? "Kitchen";
+      setToast(`${extra} ${boughtUnit} extra added to ${label}`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      setToast("Failed to save extra");
+    } finally {
+      setExtraItem(null);
+    }
+  }
+
   // Group by recipe title, unchecked before checked
   const sections = (() => {
     const groups: Record<string, ShoppingListItem[]> = {};
@@ -177,19 +246,11 @@ export default function ShopScreen() {
   const checkedCount = items.filter((i) => i.checked).length;
   const totalCount = items.length;
 
-  function renderRightActions(
-    _progress: Animated.AnimatedInterpolation<number>,
-    dragX: Animated.AnimatedInterpolation<number>
-  ) {
-    const opacity = dragX.interpolate({
-      inputRange: [-80, -60, 0],
-      outputRange: [1, 0.8, 0],
-      extrapolate: "clamp",
-    });
+  function renderLeftActions(item: ShoppingListItem) {
     return (
-      <Animated.View style={[styles.swipeAction, { opacity }]}>
+      <Pressable style={styles.swipeAction} onPress={() => handleDelete(item)}>
         <Text style={styles.swipeActionText}>Remove</Text>
-      </Animated.View>
+      </Pressable>
     );
   }
 
@@ -203,9 +264,8 @@ export default function ShopScreen() {
 
     return (
       <Swipeable
-        renderRightActions={renderRightActions}
-        onSwipeableOpen={() => handleDelete(item)}
-        overshootRight={false}
+        renderLeftActions={() => renderLeftActions(item)}
+        overshootLeft={false}
       >
         <Pressable style={styles.itemRow} onPress={() => handleToggle(item)}>
           <View style={[styles.checkbox, item.checked && styles.checkboxChecked]}>
@@ -217,13 +277,15 @@ export default function ShopScreen() {
           >
             {qty}{item.name}
           </Text>
-          <Pressable
-            onPress={() => handleDelete(item)}
-            hitSlop={8}
-            style={styles.deleteBtn}
-          >
-            <Text style={styles.deleteX}>✕</Text>
-          </Pressable>
+          {item.checked && (
+            <Pressable
+              onPress={() => openBoughtExtra(item)}
+              hitSlop={8}
+              style={styles.addMoreBtn}
+            >
+              <Text style={styles.addMoreText}>add more</Text>
+            </Pressable>
+          )}
         </Pressable>
       </Swipeable>
     );
@@ -291,11 +353,26 @@ export default function ShopScreen() {
             keyExtractor={(item) => String(item.id)}
             renderItem={renderItem}
             stickySectionHeadersEnabled={false}
-            renderSectionHeader={({ section }) => (
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionLabel}>{section.title.toUpperCase()}</Text>
-              </View>
-            )}
+            renderSectionHeader={({ section }) => {
+              const allChecked =
+                section.title !== "Items" &&
+                section.data.length > 0 &&
+                section.data.every((i) => i.checked);
+              return (
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionLabel}>{section.title.toUpperCase()}</Text>
+                  {allChecked && (
+                    <Pressable
+                      style={styles.cookedBtn}
+                      onPress={() => handleCookedSection(section.title)}
+                    >
+                      <Check size={14} strokeWidth={2.75} color={colors.bg} />
+                      <Text style={styles.cookedBtnText}>Cooked it</Text>
+                    </Pressable>
+                  )}
+                </View>
+              );
+            }}
             contentContainerStyle={styles.listContent}
           />
           {checkedCount > 0 && (
@@ -309,6 +386,57 @@ export default function ShopScreen() {
           )}
         </>
       )}
+
+      {/* Bought extra modal */}
+      <Modal visible={extraItem !== null} transparent animationType="slide">
+        <KeyboardAvoidingView
+          style={styles.sheetOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <Pressable style={styles.sheetBackdrop} onPress={() => setExtraItem(null)} />
+          <View style={styles.sheetContent}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>
+              How much {extraItem?.name} did you buy?
+            </Text>
+            <Text style={styles.sheetNote}>
+              Recipe called for {extraItem?.quantity ?? "?"} {extraItem?.unit ?? ""}. Any extra goes to your kitchen.
+            </Text>
+            <View style={styles.pickerRow}>
+              <View style={styles.pickerCol}>
+                <Text style={styles.pickerLabel}>Qty</Text>
+                <Picker
+                  selectedValue={boughtQty}
+                  onValueChange={setBoughtQty}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {QUANTITIES.map((q) => (
+                    <Picker.Item key={q} label={String(q)} value={q} />
+                  ))}
+                </Picker>
+              </View>
+              <View style={styles.pickerCol}>
+                <Text style={styles.pickerLabel}>Unit</Text>
+                <Picker
+                  selectedValue={boughtUnit}
+                  onValueChange={setBoughtUnit}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {UNITS.map((u) => (
+                    <Picker.Item key={u} label={u} value={u} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+            <View style={styles.sheetActions}>
+              <Button title="Save" onPress={handleBoughtExtra} />
+              <Button title="Cancel" variant="secondary" onPress={() => setExtraItem(null)} />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <Toast message={toast} visible={!!toast} onDismiss={() => setToast("")} />
     </GestureHandlerRootView>
@@ -418,15 +546,6 @@ const styles = StyleSheet.create({
     color: colors.neutral[500],
     textDecorationLine: "line-through",
   },
-  deleteBtn: {
-    padding: 6,
-    marginLeft: 8,
-  },
-  deleteX: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    color: colors.neutral[500],
-  },
   // Swipe
   swipeAction: {
     backgroundColor: colors.accent.DEFAULT,
@@ -434,7 +553,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: 80,
     marginBottom: 6,
-    marginRight: layout.screenGutter,
+    marginLeft: layout.screenGutter,
     borderRadius: radii.pill,
   },
   swipeActionText: {
@@ -450,6 +569,99 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: layout.screenGutter,
     paddingBottom: 16,
+  },
+  // Cooked it button
+  cookedBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: colors.accent2[600],
+    borderRadius: radii.pill,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  cookedBtnText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 12,
+    color: colors.bg,
+  },
+  // Add more
+  addMoreBtn: {
+    padding: 6,
+    marginLeft: 8,
+  },
+  addMoreText: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.neutral[500],
+  },
+  // Sheet
+  sheetOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  sheetBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  sheetContent: {
+    backgroundColor: colors.bg,
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
+    paddingBottom: 40,
+    paddingHorizontal: layout.screenGutter,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.neutral[400],
+    alignSelf: "center",
+    marginTop: 10,
+    marginBottom: 14,
+  },
+  sheetTitle: {
+    ...typ.h4,
+    color: colors.text,
+    marginBottom: 4,
+  },
+  sheetNote: {
+    fontFamily: fonts.body,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.neutral[600],
+    marginBottom: 8,
+  },
+  sheetActions: {
+    gap: 8,
+    marginTop: 8,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  pickerCol: {
+    flex: 1,
+    alignItems: "center",
+  },
+  pickerLabel: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 13,
+    color: colors.neutral[600],
+    marginBottom: 4,
+  },
+  picker: {
+    width: "100%",
+    height: 150,
+  },
+  pickerItem: {
+    fontFamily: fonts.body,
+    fontSize: 18,
+    color: colors.text,
   },
   // Empty
   emptyCircle: {
