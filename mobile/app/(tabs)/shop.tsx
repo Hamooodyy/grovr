@@ -17,6 +17,7 @@ import { ShoppingCart } from "lucide-react-native";
 import {
   getShoppingList,
   addToShoppingList,
+  addPantryItem,
   toggleShoppingItem,
   deleteShoppingItem,
   clearCheckedItems,
@@ -56,6 +57,12 @@ export default function ShopScreen() {
     }, [fetchItems])
   );
 
+  const CATEGORY_LABELS: Record<string, string> = {
+    fridge: "Fridge",
+    spice: "Spice rack",
+    pantry: "Pantry",
+  };
+
   async function handleToggle(item: ShoppingListItem) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const newChecked = !item.checked;
@@ -66,6 +73,20 @@ export default function ShopScreen() {
       const token = await getTokenRef.current();
       if (!token) return;
       await toggleShoppingItem(token, item.id, newChecked);
+
+      // Add to kitchen when checking off
+      if (newChecked) {
+        const qty = item.quantity ? parseFloat(item.quantity) : 1;
+        const unit = item.unit || "ct";
+        const result = await addPantryItem(token, {
+          name: item.name,
+          quantity: isNaN(qty) ? 1 : qty,
+          unit,
+        });
+        const cat = result.item.category;
+        const label = CATEGORY_LABELS[cat] ?? "Kitchen";
+        setToast(`Added to ${label}`);
+      }
     } catch {
       setItems((prev) =>
         prev.map((i) => (i.id === item.id ? { ...i, checked: !newChecked } : i))
