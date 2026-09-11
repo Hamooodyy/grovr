@@ -10,6 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { colors, fonts, type as typ, radii, layout } from "../../lib/theme";
+import { Button } from "../../components/Button";
 
 export default function SignUpScreen() {
   const { signUp } = useSignUp();
@@ -45,7 +47,6 @@ export default function SignUpScreen() {
       setPendingVerification(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
-
       setError(msg);
     }
   }
@@ -71,7 +72,6 @@ export default function SignUpScreen() {
       router.replace("/(tabs)");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
-
       setError(msg);
     }
   }
@@ -83,7 +83,7 @@ export default function SignUpScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={styles.inner}>
-          <Text style={styles.logo}>Verify your email</Text>
+          <Text style={styles.heading}>Verify your email</Text>
           <Text style={styles.subtitle}>We sent a code to {email}</Text>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -91,15 +91,13 @@ export default function SignUpScreen() {
           <TextInput
             style={styles.input}
             placeholder="Verification code"
-            placeholderTextColor="#6a7c71"
+            placeholderTextColor={colors.neutral[500]}
             value={code}
             onChangeText={setCode}
             keyboardType="number-pad"
           />
 
-          <Pressable style={styles.button} onPress={handleVerify}>
-            <Text style={styles.buttonText}>Verify</Text>
-          </Pressable>
+          <Button title="Verify" onPress={handleVerify} />
         </View>
       </KeyboardAvoidingView>
     );
@@ -119,7 +117,7 @@ export default function SignUpScreen() {
         <TextInput
           style={styles.input}
           placeholder="Email"
-          placeholderTextColor="#6a7c71"
+          placeholderTextColor={colors.neutral[500]}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -128,15 +126,13 @@ export default function SignUpScreen() {
         <TextInput
           style={styles.input}
           placeholder="Password"
-          placeholderTextColor="#6a7c71"
+          placeholderTextColor={colors.neutral[500]}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
         />
 
-        <Pressable style={styles.button} onPress={handleSignUp}>
-          <Text style={styles.buttonText}>Sign up</Text>
-        </Pressable>
+        <Button title="Sign up" onPress={handleSignUp} />
 
         <View nativeID="clerk-captcha" />
 
@@ -156,52 +152,50 @@ export default function SignUpScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f6fdf8",
+    backgroundColor: colors.bg,
   },
   inner: {
     flex: 1,
     justifyContent: "center",
-    paddingHorizontal: 32,
+    paddingHorizontal: layout.screenGutter,
   },
   logo: {
-    fontSize: 36,
-    fontWeight: "800",
-    color: "#0e1f14",
+    fontFamily: fonts.heading,
+    fontSize: 40,
+    color: colors.text,
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  heading: {
+    fontFamily: fonts.heading,
+    fontSize: 28,
+    color: colors.text,
     textAlign: "center",
     marginBottom: 4,
   },
   subtitle: {
+    fontFamily: fonts.body,
     fontSize: 16,
-    color: "#6a7c71",
+    lineHeight: 24,
+    color: colors.neutral[600],
     textAlign: "center",
     marginBottom: 40,
   },
   input: {
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    borderRadius: 12,
-    padding: 16,
+    minHeight: 52,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    borderRadius: radii.pill,
+    paddingHorizontal: 18,
+    fontFamily: fonts.body,
     fontSize: 16,
-    color: "#0e1f14",
+    color: colors.text,
     marginBottom: 14,
-    textAlign: "left",
-    writingDirection: "ltr",
-  },
-  button: {
-    backgroundColor: "#16a34a",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
   },
   error: {
-    color: "#dc2626",
+    fontFamily: fonts.body,
+    color: "#b91c1c",
     textAlign: "center",
     marginBottom: 16,
     fontSize: 14,
@@ -212,12 +206,13 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   footerText: {
-    color: "#6a7c71",
+    fontFamily: fonts.body,
+    color: colors.neutral[600],
     fontSize: 14,
   },
   link: {
-    color: "#16a34a",
+    fontFamily: fonts.bodySemiBold,
+    color: colors.cta.DEFAULT,
     fontSize: 14,
-    fontWeight: "600",
   },
 });

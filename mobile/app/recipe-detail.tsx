@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
   backText: {
     fontFamily: fonts.body,
     fontSize: 15,
-    color: colors.accent.DEFAULT,
+    color: colors.cta.DEFAULT,
   },
   title: {
     ...typ.h2,
@@ -449,14 +449,14 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.accent[200],
+    backgroundColor: colors.cta[200],
     alignItems: "center",
     justifyContent: "center",
   },
   stepNum: {
     fontFamily: fonts.heading,
     fontSize: 13,
-    color: colors.accent[800],
+    color: colors.cta[800],
   },
   stepText: {
     fontFamily: fonts.body,

@@ -21,10 +21,12 @@ import {
   getShoppingList,
   addToShoppingList,
   addPantryItem,
+  deductPantryItems,
   toggleShoppingItem,
   deleteShoppingItem,
   clearCheckedItems,
   type ShoppingListItem,
+  type RecipeIngredient,
 } from "../../lib/api";
 import { colors, fonts, type as typ, radii, layout } from "../../lib/theme";
 import { Button } from "../../components/Button";
@@ -92,20 +94,6 @@ export default function ShopScreen() {
       const token = await getTokenRef.current();
       if (!token) return;
       await toggleShoppingItem(token, item.id, newChecked);
-
-      // Add to kitchen when checking off
-      if (newChecked) {
-        const qty = item.quantity ? parseFloat(item.quantity) : 1;
-        const unit = item.unit || "ct";
-        const result = await addPantryItem(token, {
-          name: item.name,
-          quantity: isNaN(qty) ? 1 : qty,
-          unit,
-        });
-        const cat = result.item.category;
-        const label = CATEGORY_LABELS[cat] ?? "Kitchen";
-        setToast(`Added to ${label}`);
-      }
     } catch {
       setItems((prev) =>
         prev.map((i) => (i.id === item.id ? { ...i, checked: !newChecked } : i))
@@ -169,16 +157,93 @@ export default function ShopScreen() {
     } catch { /* ignore */ }
   }
 
-  // "Cooked it" — clear all items in a recipe section
-  async function handleCookedSection(sectionTitle: string) {
-    const sectionItems = items.filter((i) => i.recipeTitle === sectionTitle);
+  // All items checked in a section — prompt for intent
+  function handleSectionComplete(sectionTitle: string, isRecipe: boolean) {
+    const sectionItems = isRecipe
+      ? items.filter((i) => i.recipeTitle === sectionTitle)
+      : items.filter((i) => !i.recipeTitle);
+
+    if (!isRecipe) {
+      // Ungrouped items — just offer "Add to kitchen"
+      Alert.alert(
+        "All items checked",
+        "Add these to your kitchen?",
+        [
+          { text: "Not yet", style: "cancel" },
+          {
+            text: "Add to kitchen",
+            onPress: () => addItemsToKitchenAndClear(sectionItems),
+          },
+        ]
+      );
+      return;
+    }
+
+    // Recipe section — offer two paths
+    Alert.alert(
+      "All done!",
+      "Did you already cook this, or just stocking up?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Just bought",
+          onPress: () => addItemsToKitchenAndClear(sectionItems),
+        },
+        {
+          text: "Bought & cooked",
+          onPress: () => handleBoughtAndCooked(sectionItems),
+        },
+      ]
+    );
+  }
+
+  // "Just bought" — add items to kitchen, clear section
+  async function addItemsToKitchenAndClear(sectionItems: ShoppingListItem[]) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setItems((prev) => prev.filter((i) => i.recipeTitle !== sectionTitle));
-    setToast("Cleared — enjoy your meal");
+    const ids = new Set(sectionItems.map((i) => i.id));
+    setItems((prev) => prev.filter((i) => !ids.has(i.id)));
     try {
       const token = await getTokenRef.current();
       if (!token) return;
+      // Add all to kitchen in parallel
+      await Promise.all(
+        sectionItems.map((i) => {
+          const qty = i.quantity ? parseFloat(i.quantity) : 1;
+          return addPantryItem(token, {
+            name: i.name,
+            quantity: isNaN(qty) ? 1 : qty,
+            unit: i.unit || "ct",
+          });
+        })
+      );
+      // Delete from shopping list
       await Promise.all(sectionItems.map((i) => deleteShoppingItem(token, i.id)));
+      setToast("Added to kitchen");
+    } catch {
+      fetchItems();
+    }
+  }
+
+  // "Bought & cooked" — skip kitchen add (net zero), deduct existing pantry items, clear section
+  async function handleBoughtAndCooked(sectionItems: ShoppingListItem[]) {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const ids = new Set(sectionItems.map((i) => i.id));
+    setItems((prev) => prev.filter((i) => !ids.has(i.id)));
+    try {
+      const token = await getTokenRef.current();
+      if (!token) return;
+      // Build ingredient list for deduction (items already in pantry that were used)
+      const ingredients: RecipeIngredient[] = sectionItems.map((i) => ({
+        name: i.name,
+        quantity: i.quantity ?? "1",
+        unit: i.unit ?? "ct",
+        inPantry: false, // these were bought, not from pantry — deduct handles "inPantry" items only
+      }));
+      // Deduct will only touch items marked inPantry, so this is safe
+      await deductPantryItems(token, ingredients);
+      // Delete from shopping list
+      await Promise.all(sectionItems.map((i) => deleteShoppingItem(token, i.id)));
+      setToast("Cleared — enjoy your meal");
     } catch {
       fetchItems();
     }
@@ -219,15 +284,11 @@ export default function ShopScreen() {
     }
   }
 
-  // Group by recipe title, unchecked before checked
+  // Group by recipe title — preserve original order
   const sections = (() => {
     const groups: Record<string, ShoppingListItem[]> = {};
     const ungrouped: ShoppingListItem[] = [];
-    const sorted = [...items].sort((a, b) => {
-      if (a.checked !== b.checked) return a.checked ? 1 : -1;
-      return 0;
-    });
-    for (const item of sorted) {
+    for (const item of items) {
       if (item.recipeTitle) {
         if (!groups[item.recipeTitle]) groups[item.recipeTitle] = [];
         groups[item.recipeTitle].push(item);
@@ -294,7 +355,7 @@ export default function ShopScreen() {
   if (loading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={colors.accent.DEFAULT} />
+        <ActivityIndicator size="large" color={colors.cta.DEFAULT} />
       </View>
     );
   }
@@ -355,19 +416,21 @@ export default function ShopScreen() {
             stickySectionHeadersEnabled={false}
             renderSectionHeader={({ section }) => {
               const allChecked =
-                section.title !== "Items" &&
                 section.data.length > 0 &&
                 section.data.every((i) => i.checked);
+              const isRecipe = section.title !== "Items";
               return (
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionLabel}>{section.title.toUpperCase()}</Text>
+                  <Text style={[styles.sectionLabel, { flex: 1 }]}>{section.title.toUpperCase()}</Text>
                   {allChecked && (
                     <Pressable
                       style={styles.cookedBtn}
-                      onPress={() => handleCookedSection(section.title)}
+                      onPress={() => handleSectionComplete(section.title, isRecipe)}
                     >
                       <Check size={14} strokeWidth={2.75} color={colors.bg} />
-                      <Text style={styles.cookedBtnText}>Cooked it</Text>
+                      <Text style={styles.cookedBtnText}>
+                        {isRecipe ? "All done" : "Add to kitchen"}
+                      </Text>
                     </Pressable>
                   )}
                 </View>
@@ -475,7 +538,7 @@ const styles = StyleSheet.create({
   },
   addBtn: {
     minHeight: 44,
-    backgroundColor: colors.accent.DEFAULT,
+    backgroundColor: colors.cta.DEFAULT,
     borderRadius: radii.pill,
     paddingHorizontal: 16,
     justifyContent: "center",
@@ -548,7 +611,7 @@ const styles = StyleSheet.create({
   },
   // Swipe
   swipeAction: {
-    backgroundColor: colors.accent.DEFAULT,
+    backgroundColor: colors.cta.DEFAULT,
     justifyContent: "center",
     alignItems: "center",
     width: 80,

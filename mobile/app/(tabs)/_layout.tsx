@@ -5,7 +5,7 @@ import { colors, fonts, layout } from "../../lib/theme";
 
 const ICON_SIZE = 23;
 const STROKE = 2.75;
-const ACTIVE = colors.accent[800];
+const ACTIVE = colors.cta[800];
 const INACTIVE = colors.neutral[600];
 
 export default function TabLayout() {
@@ -94,7 +94,7 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   activePill: {
-    backgroundColor: colors.accent[200],
+    backgroundColor: colors.cta[200],
     borderRadius: 20,
     width: 44,
     height: 32,

@@ -93,14 +93,14 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: radii.pill,
-    backgroundColor: colors.accent[200],
+    backgroundColor: colors.cta[200],
     alignItems: "center",
     justifyContent: "center",
   },
   benefitNum: {
     fontFamily: fonts.body,
     fontSize: 13,
-    color: colors.accent[800],
+    color: colors.cta[800],
   },
   benefitText: {
     fontFamily: fonts.body,

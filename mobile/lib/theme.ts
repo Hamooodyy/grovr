@@ -26,6 +26,17 @@ export const colors = {
     900: "#402310",
   },
 
+  cta: {
+    DEFAULT: "#3d5a3e",
+    pressed: "#2e452f",
+    100: "#e8f0e8",
+    200: "#c8d9c9",
+    300: "#a3bea5",
+    700: "#2e452f",
+    800: "#1f3020",
+    900: "#142014",
+  },
+
   accent2: {
     DEFAULT: "#7a8a5e",
     100: "#f0fae1",

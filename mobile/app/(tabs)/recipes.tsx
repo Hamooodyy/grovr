@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: "100%",
-    backgroundColor: colors.accent.DEFAULT,
+    backgroundColor: colors.cta.DEFAULT,
     borderRadius: radii.pill,
   },
   // List
@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
   },
   // Swipe refresh
   refreshAction: {
-    backgroundColor: colors.accent.DEFAULT,
+    backgroundColor: colors.cta.DEFAULT,
     justifyContent: "center",
     alignItems: "center",
     width: 80,

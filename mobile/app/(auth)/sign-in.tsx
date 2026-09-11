@@ -10,6 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { colors, fonts, type as typ, radii, layout } from "../../lib/theme";
+import { Button } from "../../components/Button";
 
 export default function SignInScreen() {
   const { signIn } = useSignIn();
@@ -67,7 +69,7 @@ export default function SignInScreen() {
         <TextInput
           style={styles.input}
           placeholder="Email"
-          placeholderTextColor="#6a7c71"
+          placeholderTextColor={colors.neutral[500]}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -76,25 +78,17 @@ export default function SignInScreen() {
         <TextInput
           style={styles.input}
           placeholder="Password"
-          placeholderTextColor="#6a7c71"
+          placeholderTextColor={colors.neutral[500]}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
         />
 
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            loading && styles.buttonDisabled,
-            pressed && { opacity: 0.7 },
-          ]}
+        <Button
+          title={loading ? "Signing in..." : "Sign in"}
           onPress={handleSignIn}
           disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? "Signing in..." : "Sign in"}
-          </Text>
-        </Pressable>
+        />
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don't have an account? </Text>
@@ -112,53 +106,43 @@ export default function SignInScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f6fdf8",
+    backgroundColor: colors.bg,
   },
   inner: {
     flex: 1,
     justifyContent: "center",
-    paddingHorizontal: 32,
+    paddingHorizontal: layout.screenGutter,
   },
   logo: {
-    fontSize: 36,
-    fontWeight: "800",
-    color: "#0e1f14",
+    fontFamily: fonts.heading,
+    fontSize: 40,
+    color: colors.text,
     textAlign: "center",
     marginBottom: 4,
   },
   subtitle: {
+    fontFamily: fonts.body,
     fontSize: 16,
-    color: "#6a7c71",
+    lineHeight: 24,
+    color: colors.neutral[600],
     textAlign: "center",
     marginBottom: 40,
   },
   input: {
-    backgroundColor: "white",
-    borderWidth: 1.5,
-    borderColor: "#ddeee4",
-    borderRadius: 12,
-    padding: 16,
+    minHeight: 52,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    borderRadius: radii.pill,
+    paddingHorizontal: 18,
+    fontFamily: fonts.body,
     fontSize: 16,
-    color: "#0e1f14",
+    color: colors.text,
     marginBottom: 14,
   },
-  button: {
-    backgroundColor: "#16a34a",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
   error: {
-    color: "#dc2626",
+    fontFamily: fonts.body,
+    color: "#b91c1c",
     textAlign: "center",
     marginBottom: 16,
     fontSize: 14,
@@ -169,12 +153,13 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   footerText: {
-    color: "#6a7c71",
+    fontFamily: fonts.body,
+    color: colors.neutral[600],
     fontSize: 14,
   },
   link: {
-    color: "#16a34a",
+    fontFamily: fonts.bodySemiBold,
+    color: colors.cta.DEFAULT,
     fontSize: 14,
-    fontWeight: "600",
   },
 });

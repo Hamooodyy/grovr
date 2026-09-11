@@ -35,9 +35,9 @@ const styles = StyleSheet.create({
     borderColor: colors.divider,
   },
   chipSelected: {
-    backgroundColor: colors.accent[100],
+    backgroundColor: colors.cta[100],
     borderWidth: 2,
-    borderColor: colors.accent.DEFAULT,
+    borderColor: colors.cta.DEFAULT,
   },
   label: {
     fontFamily: fonts.body,
@@ -46,6 +46,6 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   labelSelected: {
-    color: colors.accent[800],
+    color: colors.cta[800],
   },
 });

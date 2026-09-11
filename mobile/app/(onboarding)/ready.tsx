@@ -113,7 +113,7 @@ export default function ReadyScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.accent.DEFAULT} />
+          <ActivityIndicator size="large" color={colors.cta.DEFAULT} />
           <Text style={styles.loadingText}>Setting up your kitchen...</Text>
         </View>
       </View>
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
   errorBody: {
     fontFamily: fonts.body,
     fontSize: 14,
-    color: colors.accent.DEFAULT,
+    color: colors.cta.DEFAULT,
     textAlign: "center",
   },
   content: {

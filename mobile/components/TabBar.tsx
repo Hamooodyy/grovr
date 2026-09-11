@@ -32,7 +32,7 @@ export function TabBar({ activeTab, onTabPress }: TabBarProps) {
               <Icon
                 size={ICON_SIZE}
                 strokeWidth={ICON_STROKE}
-                color={active ? colors.accent[800] : colors.neutral[600]}
+                color={active ? colors.cta[800] : colors.neutral[600]}
               />
             </View>
             <Text style={[styles.label, active && styles.labelActive]}>
@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   iconWrapActive: {
-    backgroundColor: colors.accent[200],
+    backgroundColor: colors.cta[200],
   },
   label: {
     fontFamily: fonts.bodySemiBold,
@@ -79,6 +79,6 @@ const styles = StyleSheet.create({
     color: colors.neutral[600],
   },
   labelActive: {
-    color: colors.accent[800],
+    color: colors.cta[800],
   },
 });

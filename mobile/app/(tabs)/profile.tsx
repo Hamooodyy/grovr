@@ -233,7 +233,7 @@ export default function ProfileScreen() {
   if (loading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={colors.accent.DEFAULT} />
+        <ActivityIndicator size="large" color={colors.cta.DEFAULT} />
       </View>
     );
   }
@@ -406,9 +406,9 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   cardSelected: {
-    backgroundColor: colors.accent[100],
+    backgroundColor: colors.cta[100],
     borderWidth: 2,
-    borderColor: colors.accent.DEFAULT,
+    borderColor: colors.cta.DEFAULT,
   },
   cardLabel: {
     fontFamily: fonts.body,
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   cardLabelSelected: {
-    color: colors.accent[800],
+    color: colors.cta[800],
   },
   list: {
     gap: 10,

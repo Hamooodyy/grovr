@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
   backText: {
     fontFamily: fonts.body,
     fontSize: 15,
-    color: colors.accent.DEFAULT,
+    color: colors.cta.DEFAULT,
   },
   stepLabel: {
     fontFamily: fonts.bodySemiBold,
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
   },
   fill: {
     height: 6,
-    backgroundColor: colors.accent.DEFAULT,
+    backgroundColor: colors.cta.DEFAULT,
     borderRadius: radii.pill,
   },
 });

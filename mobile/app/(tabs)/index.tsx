@@ -128,7 +128,7 @@ export default function HomeScreen() {
   if (loading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={colors.accent.DEFAULT} />
+        <ActivityIndicator size="large" color={colors.cta.DEFAULT} />
       </View>
     );
   }
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
   link: {
     fontFamily: fonts.body,
     fontSize: 13,
-    color: colors.accent.DEFAULT,
+    color: colors.cta.DEFAULT,
   },
   disclaimer: {
     fontFamily: fonts.body,

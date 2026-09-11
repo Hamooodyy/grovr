@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
 
 const variantStyles: Record<Variant, ViewStyle> = {
   primary: {
-    backgroundColor: colors.accent.DEFAULT,
+    backgroundColor: colors.cta.DEFAULT,
   },
   secondary: {
     backgroundColor: "transparent",
@@ -65,7 +65,7 @@ const variantStyles: Record<Variant, ViewStyle> = {
 
 const pressedStyles: Record<Variant, ViewStyle> = {
   primary: {
-    backgroundColor: colors.accent[700],
+    backgroundColor: colors.cta.pressed,
   },
   secondary: {
     backgroundColor: colors.neutral[200],
@@ -80,9 +80,9 @@ const labelStyles: Record<Variant, TextStyle> = {
     color: colors.bg,
   },
   secondary: {
-    color: colors.accent.DEFAULT,
+    color: colors.cta.DEFAULT,
   },
   ghost: {
-    color: colors.accent.DEFAULT,
+    color: colors.cta.DEFAULT,
   },
 };

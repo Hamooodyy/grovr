@@ -66,12 +66,12 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 18,
     borderRadius: radii.pill,
-    backgroundColor: colors.accent.DEFAULT,
+    backgroundColor: colors.cta.DEFAULT,
     alignItems: "center",
     justifyContent: "center",
   },
   buttonPressed: {
-    backgroundColor: colors.accent[700],
+    backgroundColor: colors.cta.pressed,
   },
   buttonDisabled: {
     opacity: 0.45,

@@ -225,7 +225,7 @@ export default function PantryScreen() {
   if (loading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={colors.accent.DEFAULT} />
+        <ActivityIndicator size="large" color={colors.cta.DEFAULT} />
       </View>
     );
   }
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
   },
   addBtn: {
     minHeight: 44,
-    backgroundColor: colors.accent.DEFAULT,
+    backgroundColor: colors.cta.DEFAULT,
     borderRadius: radii.pill,
     paddingHorizontal: 16,
     justifyContent: "center",
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   categoryTabActive: {
-    backgroundColor: colors.accent.DEFAULT,
+    backgroundColor: colors.cta.DEFAULT,
   },
   categoryTabText: {
     fontFamily: fonts.bodySemiBold,
@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
   },
   // Swipe
   swipeAction: {
-    backgroundColor: colors.accent.DEFAULT,
+    backgroundColor: colors.cta.DEFAULT,
     justifyContent: "center",
     alignItems: "flex-start",
     paddingLeft: 20,
