@@ -1,6 +1,6 @@
 import { ClerkProvider, useAuth } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
-import { Slot, useRouter, useSegments } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { useFonts, Caprasimo_400Regular } from "@expo-google-fonts/caprasimo";
@@ -94,7 +94,15 @@ function AuthGate() {
 
   return (
     <OnboardingContext.Provider value={{ markOnboardingDone }}>
-      <Slot />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(onboarding)" />
+        <Stack.Screen
+          name="recipe-detail"
+          options={{ presentation: "card" }}
+        />
+      </Stack>
     </OnboardingContext.Provider>
   );
 }

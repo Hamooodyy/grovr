@@ -56,7 +56,7 @@ export default function FoodPreferencesScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.heading}>What do you like to eat?</Text>
         <Text style={styles.sub}>
-          Pick as many as you want — this shapes your recommendations.
+          Pick your favorites.
         </Text>
 
         <View style={styles.chips}>
@@ -74,7 +74,7 @@ export default function FoodPreferencesScreen() {
           Anything you don't eat?
         </Text>
         <Text style={styles.sub}>
-          Allergies, restrictions or plain dislikes. Optional.
+          Allergies, dislikes, whatever. Optional.
         </Text>
 
         <PillInput

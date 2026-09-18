@@ -137,17 +137,15 @@ export default function ReadyScreen() {
     <View style={styles.container}>
       <View style={styles.content}>
         <Tag
-          label="Based on what we know about you"
+          label="Based on your preferences"
           variant="accent2"
         />
 
         <Text style={styles.headline}>
-          {hasPantry ? "Grovr already has an idea." : "No problem — here's a start."}
+          {hasPantry ? "Here's what we'd cook tonight." : "Here's something to start with."}
         </Text>
         <Text style={styles.sub}>
-          {hasPantry
-            ? "Straight from what you told us and what's on your shelves right now."
-            : "Grovr will learn your kitchen from the groceries you buy. In the meantime, here's something that fits your tastes and your weeknights."}
+          {"Based on what's in your kitchen and what you like."}
         </Text>
 
         {recipe && (
@@ -181,7 +179,7 @@ export default function ReadyScreen() {
           />
         )}
         <Button
-          title="Start using Grovr"
+          title="Let's cook"
           variant="ghost"
           onPress={() => {
             markOnboardingDone();

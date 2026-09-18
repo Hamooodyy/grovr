@@ -77,10 +77,9 @@ export default function PantrySetupScreen() {
       <StepHeader step={4} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.heading}>What do you have on hand?</Text>
+        <Text style={styles.heading}>What's in your kitchen?</Text>
         <Text style={styles.sub}>
-          A handful is plenty — Grovr uses it to make your first recommendations
-          real. Half a minute, tops.
+          Just a few things. We'll use these to pick your first recipes.
         </Text>
 
         <PillInput

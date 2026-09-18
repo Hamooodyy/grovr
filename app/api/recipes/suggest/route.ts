@@ -128,7 +128,17 @@ RULES:
 - Mark each ingredient as inPantry: true if it matches something in the inventory above, false if they need to buy it
 - Include a good variety — different cuisines, proteins, and cooking styles
 - Keep it practical — home cooking, not restaurant-level
-- Include accurate quantities for each ingredient
+
+INGREDIENT FORMATTING (critical):
+- "name" must be a plain grocery item name — exactly what you'd see on a shelf or shopping list
+  GOOD: "red bell pepper", "chicken breast", "cheddar cheese", "yellow onion"
+  BAD: "assorted bell peppers, sliced", "boneless skinless chicken breast, cubed", "freshly grated parmesan"
+- NO prep instructions in the name (no "diced", "sliced", "minced", "chopped", "grated", "cubed", etc.)
+- NO descriptive modifiers like "fresh", "assorted", "quality", "good". Only include modifiers that distinguish the product (e.g. "red bell pepper" vs "green bell pepper")
+- If a recipe needs multiple colors/types, list each as a separate ingredient with its own quantity (e.g. 1 red bell pepper + 1 green bell pepper, NOT "2 assorted bell peppers")
+- "quantity" must be a number as a string (e.g. "1", "0.5", "2")
+- "unit" must be one of: ct, small, medium, large, oz, lbs, g, tsp, tbsp, cup, fl oz, pint, quart, gallon, mL, clove, slice, can, stick, head, sprig, dozen, pack, bunch
+- Prep details (slicing, dicing, marinating) belong in the instructions, NOT in the ingredient name
 
 Return ONLY valid JSON matching this schema:
 {

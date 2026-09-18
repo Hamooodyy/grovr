@@ -1,6 +1,6 @@
 import { useAuth } from "@clerk/expo";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   View,
@@ -11,12 +11,15 @@ import {
   FlatList,
   ActivityIndicator,
   Animated,
+  Modal,
 } from "react-native";
 import { GestureHandlerRootView, Swipeable } from "react-native-gesture-handler";
 import { RefreshCw } from "lucide-react-native";
 import {
   suggestRecipes,
   getSavedRecipes,
+  deleteSavedRecipe,
+  deductPantryItems,
   submitRecipeFeedback,
   getRecipeFeedback,
   type RecipeResponse,
@@ -33,9 +36,9 @@ const FILTERS = ["For you", "Saved"] as const;
 type Filter = (typeof FILTERS)[number];
 
 const LOADING_STAGES = [
-  "Analysing your kitchen...",
+  "Analyzing your kitchen...",
   "Cooking up recipes...",
-  "Finishing touches...",
+  "Plating it up...",
 ];
 
 // Module-level cache so recipes survive tab unmount/remount
@@ -57,6 +60,7 @@ export default function RecipesScreen() {
   const [searching, setSearching] = useState(false);
   const [feedbackMap, setFeedbackMap] = useState<Record<string, "like" | "dislike">>({});
   const [refreshingIndex, setRefreshingIndex] = useState<number | null>(null);
+  const [feedbackItem, setFeedbackItem] = useState<SavedRecipeResponse | null>(null);
 
   // Sync state setters with module-level cache
   function setRecipes(updater: RecipeResponse[] | ((prev: RecipeResponse[]) => RecipeResponse[])) {
@@ -89,23 +93,25 @@ export default function RecipesScreen() {
     }
   }, [sessionId]);
 
-  useEffect(() => {
-    async function loadSaved() {
-      try {
-        const token = await getTokenRef.current();
-        if (!token) return;
-        const [savedData, feedbackData] = await Promise.all([
-          getSavedRecipes(token),
-          getRecipeFeedback(token),
-        ]);
-        setSaved(savedData.recipes);
-        const map: Record<string, "like" | "dislike"> = {};
-        feedbackData.feedback.forEach((f: FeedbackItem) => { map[f.recipeTitle] = f.feedback; });
-        setFeedbackMap(map);
-      } catch { /* ignore */ }
-    }
-    if (sessionId) loadSaved();
-  }, [sessionId]);
+  useFocusEffect(
+    useCallback(() => {
+      async function loadSaved() {
+        try {
+          const token = await getTokenRef.current();
+          if (!token) return;
+          const [savedData, feedbackData] = await Promise.all([
+            getSavedRecipes(token),
+            getRecipeFeedback(token),
+          ]);
+          setSaved(savedData.recipes);
+          const map: Record<string, "like" | "dislike"> = {};
+          feedbackData.feedback.forEach((f: FeedbackItem) => { map[f.recipeTitle] = f.feedback; });
+          setFeedbackMap(map);
+        } catch { /* ignore */ }
+      }
+      if (sessionId) loadSaved();
+    }, [sessionId])
+  );
 
   function startLoadingAnimation() {
     stageTimers.current.forEach(clearTimeout);
@@ -239,6 +245,26 @@ export default function RecipesScreen() {
     });
   }
 
+  function handleCooked(item: SavedRecipeResponse) {
+    setFeedbackItem(item);
+  }
+
+  async function finishCooked(item: SavedRecipeResponse, type: "like" | "dislike") {
+    setFeedbackItem(null);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setSaved((prev) => prev.filter((r) => r.id !== item.id));
+    setFeedbackMap((prev) => ({ ...prev, [item.title]: type }));
+    try {
+      const token = await getTokenRef.current();
+      if (!token) return;
+      await Promise.all([
+        submitRecipeFeedback(token, item.title, type),
+        deductPantryItems(token, item.ingredients),
+        deleteSavedRecipe(token, item.id),
+      ]);
+    } catch { /* ignore */ }
+  }
+
   function renderSwipeAction(index: number) {
     return (
       <Pressable
@@ -267,13 +293,31 @@ export default function RecipesScreen() {
     const inKitchen = item.ingredients.filter((i) => i.inPantry).length;
     const needMore = item.ingredients.filter((i) => !i.inPantry).length;
 
+    const isSaved = filter === "Saved";
+
     const cardContent = (
       <Pressable onPress={() => openDetail(item)}>
         <Card elevation="sm" style={styles.recipeCard}>
-          <Text style={styles.cardTitle}>{item.title}</Text>
-          <Text style={styles.cardMeta}>
-            {item.cookTime} · {item.difficulty} · {item.servings} servings
-          </Text>
+          <View style={styles.cardHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>{item.title}</Text>
+              <Text style={styles.cardMeta}>
+                {item.cookTime} · {item.difficulty} · {item.servings} servings
+              </Text>
+            </View>
+            {isSaved && (
+              <Pressable
+                style={styles.cookedBtn}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleCooked(item as SavedRecipeResponse);
+                }}
+                hitSlop={6}
+              >
+                <Text style={styles.cookedBtnText}>Cooked?</Text>
+              </Pressable>
+            )}
+          </View>
           <View style={styles.cardTags}>
             <Tag
               label={`${inKitchen} in your kitchen`}
@@ -288,18 +332,20 @@ export default function RecipesScreen() {
       </Pressable>
     );
 
-    if (filter !== "Saved") {
+    if (!isSaved) {
       return (
-        <Swipeable
-          renderLeftActions={() => renderSwipeAction(index)}
-          overshootLeft={false}
-        >
-          {cardContent}
-        </Swipeable>
+        <View style={{ marginBottom: 10 }}>
+          <Swipeable
+            renderLeftActions={() => renderSwipeAction(index)}
+            overshootLeft={false}
+          >
+            {cardContent}
+          </Swipeable>
+        </View>
       );
     }
 
-    return cardContent;
+    return <View style={{ marginBottom: 10 }}>{cardContent}</View>;
   }
 
   if (loading) {
@@ -333,7 +379,7 @@ export default function RecipesScreen() {
           value={query}
           onChangeText={setQuery}
           onSubmitEditing={handleIngredientSearch}
-          placeholder="Generate recipes with an ingredient..."
+          placeholder="Search by ingredient..."
           placeholderTextColor={colors.neutral[500]}
           style={styles.searchInput}
           returnKeyType="search"
@@ -355,9 +401,9 @@ export default function RecipesScreen() {
 
       {!hasGenerated && filtered.length === 0 ? (
         <View style={styles.center}>
-          <Text style={styles.emptyTitle}>Nothing on that shelf yet</Text>
+          <Text style={styles.emptyTitle}>No results</Text>
           <Text style={styles.emptyBody}>
-            Try another filter — or clear the search.
+            Try a different search or filter.
           </Text>
         </View>
       ) : (
@@ -380,6 +426,40 @@ export default function RecipesScreen() {
           }
         />
       )}
+      {/* Feedback modal */}
+      <Modal visible={feedbackItem !== null} transparent animationType="slide">
+        <View style={styles.sheetOverlay}>
+          <Pressable style={styles.sheetBackdrop} onPress={() => setFeedbackItem(null)} />
+          <View style={styles.sheetContent}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>How was it?</Text>
+            <Text style={styles.sheetSub}>Helps us pick better recipes for you.</Text>
+            <View style={styles.feedbackRow}>
+              <Pressable
+                style={styles.feedbackOption}
+                onPress={() => feedbackItem && finishCooked(feedbackItem, "dislike")}
+              >
+                <Text style={styles.feedbackEmoji}>👎</Text>
+                <Text style={styles.feedbackLabel}>Not for me</Text>
+              </Pressable>
+              <Pressable
+                style={styles.feedbackOption}
+                onPress={() => feedbackItem && finishCooked(feedbackItem, "like")}
+              >
+                <Text style={styles.feedbackEmoji}>😐</Text>
+                <Text style={styles.feedbackLabel}>It was okay</Text>
+              </Pressable>
+              <Pressable
+                style={styles.feedbackOption}
+                onPress={() => feedbackItem && finishCooked(feedbackItem, "like")}
+              >
+                <Text style={styles.feedbackEmoji}>👍</Text>
+                <Text style={styles.feedbackLabel}>Loved it</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </GestureHandlerRootView>
   );
 }
@@ -452,7 +532,6 @@ const styles = StyleSheet.create({
   recipeCard: {
     padding: 16,
     paddingHorizontal: 18,
-    marginBottom: 10,
     gap: 7,
   },
   cardTitle: {
@@ -469,6 +548,85 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
+  },
+  // Card header with cooked button
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  cookedBtn: {
+    backgroundColor: colors.cta.DEFAULT,
+    borderRadius: radii.pill,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginTop: 2,
+  },
+  cookedBtnText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 12,
+    color: colors.bg,
+  },
+  // Feedback sheet
+  sheetOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  sheetBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  sheetContent: {
+    backgroundColor: colors.bg,
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
+    paddingBottom: 40,
+    paddingHorizontal: layout.screenGutter,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.neutral[400],
+    alignSelf: "center",
+    marginTop: 10,
+    marginBottom: 14,
+  },
+  sheetTitle: {
+    ...typ.h4,
+    color: colors.text,
+    marginBottom: 4,
+  },
+  sheetSub: {
+    fontFamily: fonts.body,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.neutral[600],
+    marginBottom: 20,
+  },
+  feedbackRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  feedbackOption: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    paddingVertical: 18,
+    alignItems: "center",
+    gap: 6,
+  },
+  feedbackEmoji: {
+    fontSize: 28,
+  },
+  feedbackLabel: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 12,
+    color: colors.text,
   },
   // Swipe refresh
   refreshAction: {

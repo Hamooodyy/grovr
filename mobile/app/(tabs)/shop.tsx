@@ -6,6 +6,7 @@ import * as Haptics from "expo-haptics";
 import {
   View,
   Text,
+  TextInput,
   Pressable,
   StyleSheet,
   SectionList,
@@ -30,7 +31,6 @@ import {
 } from "../../lib/api";
 import { colors, fonts, type as typ, radii, layout } from "../../lib/theme";
 import { Button } from "../../components/Button";
-import { PillInput } from "../../components/PillInput";
 import { Toast } from "../../components/Toast";
 
 const QUANTITIES = [
@@ -51,6 +51,9 @@ export default function ShopScreen() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
+  const [pickerQty, setPickerQty] = useState(1);
+  const [pickerUnit, setPickerUnit] = useState("ct");
+  const [adding, setAdding] = useState(false);
   const [toast, setToast] = useState("");
 
   // "Bought extra?" modal state
@@ -146,15 +149,22 @@ export default function ShopScreen() {
       setNewName("");
       return;
     }
+    setAdding(true);
     try {
       const token = await getTokenRef.current();
       if (!token) return;
-      const data = await addToShoppingList(token, [{ name: trimmed }]);
+      const data = await addToShoppingList(token, [
+        { name: trimmed, quantity: String(pickerQty), unit: pickerUnit },
+      ]);
       setItems((prev) => [...prev, ...data.items]);
       setNewName("");
+      setPickerQty(1);
+      setPickerUnit("ct");
       setShowAdd(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch { /* ignore */ }
+    } catch { /* ignore */ } finally {
+      setAdding(false);
+    }
   }
 
   // All items checked in a section — prompt for intent
@@ -243,7 +253,7 @@ export default function ShopScreen() {
       await deductPantryItems(token, ingredients);
       // Delete from shopping list
       await Promise.all(sectionItems.map((i) => deleteShoppingItem(token, i.id)));
-      setToast("Cleared — enjoy your meal");
+      setToast("Done. Enjoy your meal.");
     } catch {
       fetchItems();
     }
@@ -367,28 +377,71 @@ export default function ShopScreen() {
           <Text style={styles.title}>Shopping list</Text>
           <Text style={styles.summary}>
             {totalCount === 0
-              ? "Nothing to buy yet."
+              ? "Nothing here yet."
               : `${checkedCount} of ${totalCount} checked`}
           </Text>
         </View>
         <Pressable
           style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
-          onPress={() => { setNewName(""); setShowAdd(!showAdd); }}
+          onPress={() => { setNewName(""); setPickerQty(1); setPickerUnit("ct"); setShowAdd(true); }}
         >
           <Text style={styles.addBtnText}>+ Add</Text>
         </Pressable>
       </View>
 
-      {showAdd && (
-        <View style={styles.addRow}>
-          <PillInput
-            value={newName}
-            onChangeText={setNewName}
-            onSubmit={handleAdd}
-            placeholder="Item name (e.g. milk)"
-          />
-        </View>
-      )}
+      {/* Add item modal */}
+      <Modal visible={showAdd} transparent animationType="slide">
+        <KeyboardAvoidingView
+          style={styles.sheetOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <Pressable style={styles.sheetBackdrop} onPress={() => setShowAdd(false)} />
+          <View style={styles.sheetContent}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Add to list</Text>
+            <TextInput
+              style={styles.sheetInput}
+              placeholder="Item name (e.g. milk)"
+              placeholderTextColor={colors.neutral[500]}
+              value={newName}
+              onChangeText={setNewName}
+              autoFocus
+            />
+            <View style={styles.pickerRow}>
+              <View style={styles.pickerCol}>
+                <Text style={styles.pickerLabel}>Qty</Text>
+                <Picker
+                  selectedValue={pickerQty}
+                  onValueChange={setPickerQty}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {QUANTITIES.map((q) => (
+                    <Picker.Item key={q} label={String(q)} value={q} />
+                  ))}
+                </Picker>
+              </View>
+              <View style={styles.pickerCol}>
+                <Text style={styles.pickerLabel}>Unit</Text>
+                <Picker
+                  selectedValue={pickerUnit}
+                  onValueChange={setPickerUnit}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {UNITS.map((u) => (
+                    <Picker.Item key={u} label={u} value={u} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+            <View style={styles.sheetActions}>
+              <Button title={adding ? "Adding..." : "Add item"} onPress={handleAdd} disabled={adding || !newName.trim()} />
+              <Button title="Cancel" variant="secondary" onPress={() => setShowAdd(false)} />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {items.length === 0 ? (
         <View style={styles.center}>
@@ -397,8 +450,7 @@ export default function ShopScreen() {
           </View>
           <Text style={styles.emptyTitle}>Your list is empty</Text>
           <Text style={styles.emptyBody}>
-            Add items yourself, or pull the missing ingredients straight out of a
-            recipe.
+            Add items or pull missing ingredients from a recipe.
           </Text>
           <Button
             title="Browse recipes"
@@ -460,11 +512,13 @@ export default function ShopScreen() {
           <View style={styles.sheetContent}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>
-              How much {extraItem?.name} did you buy?
+              How much {extraItem?.name} do you need?
             </Text>
-            <Text style={styles.sheetNote}>
-              Recipe called for {extraItem?.quantity ?? "?"} {extraItem?.unit ?? ""}. Any extra goes to your kitchen.
-            </Text>
+            {extraItem?.recipeTitle ? (
+              <Text style={styles.sheetNote}>
+                Recipe calls for {extraItem?.quantity ?? "?"} {extraItem?.unit ?? ""}. Any extra will be added to your kitchen.
+              </Text>
+            ) : null}
             <View style={styles.pickerRow}>
               <View style={styles.pickerCol}>
                 <Text style={styles.pickerLabel}>Qty</Text>
@@ -547,10 +601,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemiBold,
     fontSize: 14,
     color: colors.bg,
-  },
-  addRow: {
-    paddingHorizontal: layout.screenGutter,
-    paddingBottom: 12,
   },
   // Section headers
   sectionHeader: {
@@ -690,7 +740,19 @@ const styles = StyleSheet.create({
   sheetTitle: {
     ...typ.h4,
     color: colors.text,
-    marginBottom: 4,
+    marginBottom: 12,
+  },
+  sheetInput: {
+    minHeight: 48,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    borderRadius: radii.pill,
+    paddingHorizontal: 18,
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.text,
+    marginBottom: 8,
   },
   sheetNote: {
     fontFamily: fonts.body,

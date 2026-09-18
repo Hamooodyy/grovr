@@ -134,8 +134,12 @@ export default function RecipeDetailScreen() {
         unit: i.unit,
         recipeTitle: recipe!.title,
       }));
-      await addToShoppingList(token, items);
-      setToast(`${items.length} item${items.length === 1 ? "" : "s"} added to list.`);
+      await Promise.all([
+        addToShoppingList(token, items),
+        saveRecipe(token, recipe!),
+      ]);
+      setToast("Recipe saved and ingredients added to list.");
+      setTimeout(() => router.back(), 1200);
     } catch {
       // ignore
     } finally {
@@ -152,29 +156,11 @@ export default function RecipeDetailScreen() {
       await saveRecipe(token, recipe!);
       // Deduct pantry items
       await deductPantryItems(token, recipe!.ingredients);
-      setToast("Bon appétit — your kitchen is updated.");
+      setToast("Kitchen updated. Enjoy!");
       setTimeout(() => router.back(), 1200);
     } catch {
       setCooking(false);
     }
-  }
-
-  // Build "Why you're seeing this" bullets from ingredient data
-  const whyBullets: string[] = [];
-  const urgentIngredients = inKitchen.filter((i) => {
-    // We don't have status on RecipeIngredient, derive from name matching
-    return i.inPantry;
-  });
-  if (inKitchen.length > 0) {
-    whyBullets.push(
-      `Uses ${inKitchen.length} ingredient${inKitchen.length === 1 ? "" : "s"} already in your kitchen`
-    );
-  }
-  if (recipe.cookTime) {
-    whyBullets.push(`Matches your ${recipe.cookTime} weeknight preference`);
-  }
-  if (recipe.difficulty === "Easy") {
-    whyBullets.push("Simple enough for a busy evening");
   }
 
   return (
@@ -201,19 +187,6 @@ export default function RecipeDetailScreen() {
           <Tag label={recipe.difficulty} variant="neutral" />
           <Tag label={`${recipe.servings} servings`} variant="neutral" />
         </View>
-
-        {/* Why you're seeing this */}
-        {whyBullets.length > 0 && (
-          <View style={styles.whyBlock}>
-            <Text style={styles.whyTitle}>Why you're seeing this</Text>
-            {whyBullets.map((bullet, i) => (
-              <View key={i} style={styles.whyRow}>
-                <View style={styles.whyDot} />
-                <Text style={styles.whyText}>{bullet}</Text>
-              </View>
-            ))}
-          </View>
-        )}
 
         {/* In your kitchen */}
         {inKitchen.length > 0 && (
@@ -245,7 +218,7 @@ export default function RecipeDetailScreen() {
                         color={colors.accent[700]}
                       />
                       <Text style={styles.mismatchText}>
-                        Units mismatch — tap to update in My Kitchen
+                        Units don't match. Tap to fix.
                       </Text>
                     </Pressable>
                   )}
@@ -298,7 +271,7 @@ export default function RecipeDetailScreen() {
                 ? addingToList
                   ? "Adding..."
                   : `Add ${needToBuy.length} missing to list`
-                : "You have everything — nice"
+                : "You have everything"
             }
             onPress={handleAddMissing}
             disabled={needToBuy.length === 0 || addingToList}
@@ -312,8 +285,7 @@ export default function RecipeDetailScreen() {
         </View>
 
         <Text style={styles.footnote}>
-          Marking it cooked lets Grovr draw down your kitchen and learn what you
-          actually use.
+          This updates your kitchen inventory.
         </Text>
       </ScrollView>
 
@@ -360,41 +332,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
     marginBottom: 20,
-  },
-  // Why you're seeing this
-  whyBlock: {
-    backgroundColor: colors.accent2[100],
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: colors.accent2[300],
-    padding: 16,
-    marginBottom: 20,
-  },
-  whyTitle: {
-    fontFamily: fonts.heading,
-    fontSize: 15,
-    color: colors.accent2[900],
-    marginBottom: 10,
-  },
-  whyRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    marginBottom: 6,
-  },
-  whyDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.accent2[600],
-    marginTop: 6,
-  },
-  whyText: {
-    fontFamily: fonts.body,
-    fontSize: 13,
-    lineHeight: 20,
-    color: colors.accent2[800],
-    flex: 1,
   },
   // Sections
   section: {

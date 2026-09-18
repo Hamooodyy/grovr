@@ -62,7 +62,7 @@ export default function SignInScreen() {
     >
       <View style={styles.inner}>
         <Text style={styles.logo}>Grovr</Text>
-        <Text style={styles.subtitle}>Your grocery companion</Text>
+        <Text style={styles.subtitle}>Your kitchen companion</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 

@@ -40,20 +40,20 @@ const CATEGORY_META: Record<string, {
 }> = {
   fridge: {
     label: "Fridge",
-    emptyTitle: "Your fridge is empty!",
-    emptyBody: "Tap \"+ Add\" to stock the fridge — a few things is plenty.",
+    emptyTitle: "Nothing in the fridge yet.",
+    emptyBody: "Tap + Add to get started.",
     addTitle: "Add to fridge",
   },
   spice: {
     label: "Spice rack",
-    emptyTitle: "Where's the flavour?",
-    emptyBody: "Tap \"+ Add\" to put your everyday spices on the shelf.",
+    emptyTitle: "No spices yet.",
+    emptyBody: "Tap + Add to get started.",
     addTitle: "Add to spice rack",
   },
   pantry: {
     label: "Pantry",
-    emptyTitle: "You've been raided!",
-    emptyBody: "Tap \"+ Add\" to restock the dry goods.",
+    emptyTitle: "Pantry is empty.",
+    emptyBody: "Tap + Add to get started.",
     addTitle: "Add to pantry",
   },
 };
@@ -242,7 +242,7 @@ export default function PantryScreen() {
             <Text style={styles.lead}>
               {totalItems > 0
                 ? `${totalItems} item${totalItems === 1 ? "" : "s"} · freshness is an estimate`
-                : "Empty for now — add a few things and Grovr starts working."}
+                : "Add a few items to get started."}
             </Text>
           </View>
           <Pressable
@@ -323,7 +323,7 @@ export default function PantryScreen() {
               <Button title="Cancel" variant="secondary" onPress={() => setShowAdd(false)} />
             </View>
             <Text style={styles.sheetNote}>
-              Quantity is optional — Grovr estimates from what you cook.
+              Quantity is optional.
             </Text>
           </View>
         </KeyboardAvoidingView>
@@ -370,8 +370,7 @@ export default function PantryScreen() {
       {/* Disclaimer */}
       {filteredItems.length > 0 && (
         <Text style={styles.disclaimer}>
-          Freshness is estimated from when an item arrived and how it's usually
-          kept. Trust your eyes and nose first.
+          Freshness is estimated. Trust your eyes and nose.
         </Text>
       )}
 

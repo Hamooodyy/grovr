@@ -5,9 +5,9 @@ import { colors, fonts, type as typ, radii, layout } from "../../lib/theme";
 import { Button } from "../../components/Button";
 
 const BENEFITS = [
-  "Use what you have",
-  "Shop smarter",
-  "Know what to cook",
+  "Cook with what you've got",
+  "Buy only what you need",
+  "Forget about asking \"what's for dinner?\"",
 ] as const;
 
 export default function WelcomeScreen() {
@@ -20,11 +20,11 @@ export default function WelcomeScreen() {
           <Leaf size={46} strokeWidth={2.75} color={colors.accent2[800]} />
         </View>
 
-        <Text style={styles.title}>Meet your grocery companion.</Text>
+        <Text style={styles.title}>Your kitchen, simplified.</Text>
 
         <Text style={styles.body}>
-          Grovr learns what you buy, what you like and what you already have — so
-          dinner stops being a decision.
+          Tell us what's in your kitchen and what you like. We'll handle the
+          rest.
         </Text>
 
         <View style={styles.benefits}>
@@ -41,7 +41,7 @@ export default function WelcomeScreen() {
 
       <View style={styles.footer}>
         <Button
-          title="Get started"
+          title="Let's go"
           onPress={() => router.push("/(onboarding)/household")}
         />
       </View>

@@ -33,7 +33,7 @@ export default function HouseholdScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.heading}>Who's cooking?</Text>
-        <Text style={styles.sub}>This sizes recipes and portions for you.</Text>
+        <Text style={styles.sub}>So we get the portions right.</Text>
 
         <View style={styles.grid}>
           {HOUSEHOLD_OPTIONS.map((opt) => (

@@ -160,8 +160,8 @@ export default function HomeScreen() {
         </Text>
         <Text style={styles.lead}>
           {hasPantry
-            ? "Two things worth cooking tonight, and one shop to make it easy."
-            : "Add a few things from your kitchen and tonight's picks get a lot sharper. Until then, these fit your tastes."}
+            ? "Here's what looks good tonight."
+            : "Add a few items to your kitchen and we'll pick better recipes. For now, these match your tastes."}
         </Text>
 
         {/* Use Soon */}
@@ -170,11 +170,11 @@ export default function HomeScreen() {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Use soon</Text>
               <Pressable onPress={() => router.push("/(tabs)/pantry")}>
-                <Text style={styles.link}>Kitchen →</Text>
+                <Text style={styles.link}>See all</Text>
               </Pressable>
             </View>
             <Text style={styles.disclaimer}>
-              Grovr's estimate of what's worth cooking next — not a safety date.
+              Estimated freshness, not a safety date.
             </Text>
             {useSoon.map((item) => {
               const days = daysUntilExpiry(item);
@@ -202,8 +202,8 @@ export default function HomeScreen() {
           </Text>
           <Text style={styles.sectionNote}>
             {hasPantry
-              ? "Chosen for what's on your shelves and what won't keep."
-              : "We'll swap these for pantry-led picks as soon as your kitchen has a few things in it."}
+              ? "Based on what's in your kitchen."
+              : "Add items to your kitchen for better picks."}
           </Text>
           {recipes.map((recipe) => {
             const inKitchen = recipe.ingredients.filter((i) => i.inPantry).length;
@@ -244,7 +244,7 @@ export default function HomeScreen() {
           <View style={styles.runningLowBlock}>
             <Text style={styles.sectionTitle}>Running low</Text>
             <Text style={styles.sectionNote}>
-              Staples you buy often and are probably out of.
+              Stuff you probably need to restock.
             </Text>
             <View style={styles.runningLowChips}>
               {runningLow.map((item) => (

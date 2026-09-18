@@ -45,7 +45,7 @@ export default function CookingPreferencesScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.heading}>What's dinner usually like?</Text>
-        <Text style={styles.sub}>Pick every cook time that works.</Text>
+        <Text style={styles.sub}>Pick all that apply.</Text>
 
         <View style={styles.list}>
           {TIME_OPTIONS.map((opt) => (
