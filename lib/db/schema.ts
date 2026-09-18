@@ -21,7 +21,6 @@ export const userProfiles = pgTable(
     cookingFrequency: text("cooking_frequency"),
     cookingTimes: text("cooking_times").array(),
     servingSize: text("serving_size"),
-    preferredStore: text("preferred_store"),
     onboardingDone: boolean("onboarding_done").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

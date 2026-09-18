@@ -1,0 +1,36 @@
+{
+  "cli": {
+    "version": ">= 15.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://localhost:3000"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://staging.grovr.app",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "PASTE_YOUR_TEST_CLERK_KEY_HERE"
+      }
+    },
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.grovr.app",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "PASTE_YOUR_PROD_CLERK_KEY_HERE"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "ahmadnayfeh092@gmail.com",
+        "ascAppId": "",
+        "appleTeamId": ""
+      }
+    }
+  }
+}

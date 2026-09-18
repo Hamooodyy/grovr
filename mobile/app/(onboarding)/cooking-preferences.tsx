@@ -89,7 +89,7 @@ export default function CookingPreferencesScreen() {
           onPress={() => {
             if (!canContinue) return;
             router.push({
-              pathname: "/(onboarding)/preferred-store",
+              pathname: "/(onboarding)/pantry-setup",
               params: {
                 ...params,
                 cookingTimes: JSON.stringify(times),

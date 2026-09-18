@@ -22,11 +22,21 @@ import { Tag } from "../components/Tag";
 import { Button } from "../components/Button";
 import { Toast } from "../components/Toast";
 
+function parseRecipe(raw: string | undefined): RecipeResponse | null {
+  try {
+    const parsed = JSON.parse(raw || "{}");
+    if (!parsed.title || !Array.isArray(parsed.ingredients)) return null;
+    return parsed as RecipeResponse;
+  } catch {
+    return null;
+  }
+}
+
 export default function RecipeDetailScreen() {
   const router = useRouter();
   const { getToken } = useAuth();
   const params = useLocalSearchParams<{ recipe: string }>();
-  const recipe: RecipeResponse = JSON.parse(params.recipe || "{}");
+  const recipe = parseRecipe(params.recipe);
 
   const [toast, setToast] = useState("");
   const [addingToList, setAddingToList] = useState(false);
@@ -37,6 +47,7 @@ export default function RecipeDetailScreen() {
   getTokenRef.current = getToken;
 
   useEffect(() => {
+    if (!recipe) return;
     async function loadPantry() {
       try {
         const token = await getTokenRef.current();
@@ -46,7 +57,23 @@ export default function RecipeDetailScreen() {
       } catch { /* ignore */ }
     }
     loadPantry();
-  }, []);
+  }, [recipe]);
+
+  if (!recipe) {
+    return (
+      <View style={styles.container}>
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}>
+          <Text style={{ ...typ.h3, color: colors.text, textAlign: "center", marginBottom: 8 }}>
+            Couldn't load recipe
+          </Text>
+          <Text style={{ fontFamily: fonts.body, fontSize: 14, color: colors.neutral[600], textAlign: "center", marginBottom: 20 }}>
+            The recipe data may be missing or corrupted.
+          </Text>
+          <Button title="Go back" onPress={() => router.back()} />
+        </View>
+      </View>
+    );
+  }
 
   const inKitchen = recipe.ingredients?.filter((i) => i.inPantry) ?? [];
   const needToBuy = recipe.ingredients?.filter((i) => !i.inPantry) ?? [];
@@ -105,7 +132,7 @@ export default function RecipeDetailScreen() {
         name: i.name,
         quantity: i.quantity,
         unit: i.unit,
-        recipeTitle: recipe.title,
+        recipeTitle: recipe!.title,
       }));
       await addToShoppingList(token, items);
       setToast(`${items.length} item${items.length === 1 ? "" : "s"} added to list.`);
@@ -122,9 +149,9 @@ export default function RecipeDetailScreen() {
       const token = await getToken();
       if (!token) return;
       // Save the recipe first
-      await saveRecipe(token, recipe);
+      await saveRecipe(token, recipe!);
       // Deduct pantry items
-      await deductPantryItems(token, recipe.ingredients);
+      await deductPantryItems(token, recipe!.ingredients);
       setToast("Bon appétit — your kitchen is updated.");
       setTimeout(() => router.back(), 1200);
     } catch {

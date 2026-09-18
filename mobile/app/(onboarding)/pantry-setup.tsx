@@ -74,7 +74,7 @@ export default function PantrySetupScreen() {
 
   return (
     <View style={styles.container}>
-      <StepHeader step={5} />
+      <StepHeader step={4} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.heading}>What do you have on hand?</Text>

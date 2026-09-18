@@ -90,6 +90,12 @@ export default function SignInScreen() {
           disabled={loading}
         />
 
+        <Link href="/(auth)/forgot-password" asChild>
+          <Pressable style={styles.forgotRow}>
+            <Text style={styles.link}>Forgot password?</Text>
+          </Pressable>
+        </Link>
+
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don't have an account? </Text>
           <Link href="/(auth)/sign-up" asChild>
@@ -146,6 +152,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 16,
     fontSize: 14,
+  },
+  forgotRow: {
+    alignItems: "center",
+    marginTop: 16,
   },
   footer: {
     flexDirection: "row",

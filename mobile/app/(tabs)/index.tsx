@@ -53,12 +53,13 @@ function expiryLabel(days: number | null): string {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { getToken } = useAuth();
+  const { getToken, sessionId } = useAuth();
   const { user } = useUser();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
 
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [pantry, setPantry] = useState<PantryItemResponse[]>([]);
   const [recipes, setRecipes] = useState<RecipeResponse[]>([]);
   const [toast, setToast] = useState("");
@@ -86,6 +87,7 @@ export default function HomeScreen() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      setError(false);
       const token = await getTokenRef.current();
       if (!token) return;
 
@@ -97,15 +99,15 @@ export default function HomeScreen() {
       setPantry(pantryData.items);
       setRecipes(recipeData.recipes);
     } catch {
-      // silently fail — show cold start
+      setError(true);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (sessionId) fetchData();
+  }, [fetchData, sessionId]);
 
   async function handleBuildList() {
     try {
@@ -129,6 +131,20 @@ export default function HomeScreen() {
     return (
       <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color={colors.cta.DEFAULT} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <Text style={{ ...typ.h3, color: colors.text, textAlign: "center", marginBottom: 8 }}>
+          Something went wrong
+        </Text>
+        <Text style={{ fontFamily: fonts.body, fontSize: 14, color: colors.neutral[600], textAlign: "center", marginBottom: 20 }}>
+          Couldn't load your kitchen data. Check your connection and try again.
+        </Text>
+        <Button title="Try again" onPress={fetchData} />
       </View>
     );
   }

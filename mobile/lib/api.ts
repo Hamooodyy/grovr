@@ -48,7 +48,6 @@ export interface OnboardingData {
     cookingFrequency: string | null;
     cookingTimes: string[] | null;
     servingSize: string | null;
-    preferredStore: string | null;
     onboardingDone: boolean;
   };
   preferences: Array<{ preference: string; type: string }>;
@@ -271,5 +270,15 @@ export async function clearCheckedItems(
   return apiFetch("/api/shopping-list", token, {
     method: "DELETE",
     body: JSON.stringify({ clearChecked: true }),
+  });
+}
+
+// ── Account ──
+
+export async function deleteAccount(
+  token: string
+): Promise<{ success: boolean }> {
+  return apiFetch("/api/user/delete", token, {
+    method: "DELETE",
   });
 }

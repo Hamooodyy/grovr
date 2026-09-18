@@ -17,7 +17,6 @@ export interface UserProfile {
   cookingFrequency: CookingFrequency | null;
   cookingTimes: CookingTime[];
   servingSize: ServingSize | null;
-  preferredStore: string | null;
   onboardingDone: boolean;
   createdAt: Date;
   updatedAt: Date;

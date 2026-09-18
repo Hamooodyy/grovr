@@ -153,7 +153,7 @@ Return ONLY valid JSON matching this schema:
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },
       temperature: 0.8,
-      max_tokens: recipeCount === 1 ? 600 : 2000,
+      max_tokens: recipeCount === 1 ? 1000 : 3000,
     });
 
     const content = completion.choices[0]?.message?.content;

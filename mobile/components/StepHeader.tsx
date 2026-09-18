@@ -7,7 +7,7 @@ interface StepHeaderProps {
   total?: number;
 }
 
-export function StepHeader({ step, total = 5 }: StepHeaderProps) {
+export function StepHeader({ step, total = 4 }: StepHeaderProps) {
   const router = useRouter();
   const progress = step / total;
 

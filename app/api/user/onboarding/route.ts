@@ -43,7 +43,6 @@ export async function GET() {
       cookingFrequency: profile.cookingFrequency,
       cookingTimes: profile.cookingTimes,
       servingSize: profile.servingSize,
-      preferredStore: profile.preferredStore,
       onboardingDone: profile.onboardingDone,
     },
     preferences: preferences.map((p) => ({
@@ -87,7 +86,6 @@ export async function PUT(request: Request) {
   if (body.cookingFrequency !== undefined) updates.cookingFrequency = body.cookingFrequency;
   if (body.cookingTimes !== undefined) updates.cookingTimes = body.cookingTimes;
   if (body.servingSize !== undefined) updates.servingSize = body.servingSize;
-  if (body.preferredStore !== undefined) updates.preferredStore = body.preferredStore;
   if (body.onboardingDone !== undefined) updates.onboardingDone = body.onboardingDone;
 
   await db

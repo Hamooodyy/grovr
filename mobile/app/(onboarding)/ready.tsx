@@ -24,7 +24,6 @@ export default function ReadyScreen() {
     dislikes: string;
     cookingTimes: string;
     servingSize: string;
-    preferredStore: string;
     pantryItems: string;
   }>();
 
@@ -61,7 +60,6 @@ export default function ReadyScreen() {
         cookingFrequency: params.frequency,
         cookingTimes,
         servingSize: params.servingSize,
-        preferredStore: params.preferredStore,
         preferences,
         pantryItems: pantryItems.map((name) => ({
           name,
@@ -70,9 +68,7 @@ export default function ReadyScreen() {
         onboardingDone: true,
       });
 
-      markOnboardingDone();
-
-      // Fetch first recipe
+      // Fetch first recipe (don't call markOnboardingDone yet — let user see this screen first)
       const data = await suggestRecipes(token, { count: 1 });
       if (data.recipes.length > 0) {
         setRecipe(data.recipes[0]);
@@ -103,8 +99,10 @@ export default function ReadyScreen() {
       if (missing.length > 0) {
         await addToShoppingList(token, missing);
       }
+      markOnboardingDone();
       router.replace("/(tabs)/shop");
     } catch {
+      markOnboardingDone();
       router.replace("/(tabs)");
     }
   }
@@ -185,7 +183,10 @@ export default function ReadyScreen() {
         <Button
           title="Start using Grovr"
           variant="ghost"
-          onPress={() => router.replace("/(tabs)")}
+          onPress={() => {
+            markOnboardingDone();
+            router.replace("/(tabs)");
+          }}
           style={{ marginTop: needToBuy > 0 ? 10 : 0 }}
         />
       </View>

@@ -30,7 +30,7 @@ export function useOnboarding() {
 }
 
 function AuthGate() {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded, isSignedIn, getToken, sessionId } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const [onboardingChecked, setOnboardingChecked] = useState(false);
@@ -53,20 +53,25 @@ function AuthGate() {
       return;
     }
 
+    // Wait for the session to be fully ready before requesting a token
+    if (!sessionId) return;
+
     // User is signed in — check onboarding status
     if (!onboardingChecked) {
-      getToken().then((token) => {
-        if (!token) return;
-        getOnboarding(token)
-          .then((data) => {
-            setOnboardingDone(data.profile.onboardingDone);
-            setOnboardingChecked(true);
-          })
-          .catch(() => {
-            setOnboardingDone(false);
-            setOnboardingChecked(true);
-          });
-      });
+      getToken()
+        .then((token) => {
+          if (!token) return;
+          return getOnboarding(token);
+        })
+        .then((data) => {
+          if (!data) return;
+          setOnboardingDone(data.profile.onboardingDone);
+          setOnboardingChecked(true);
+        })
+        .catch(() => {
+          setOnboardingDone(false);
+          setOnboardingChecked(true);
+        });
       return;
     }
 
@@ -85,7 +90,7 @@ function AuthGate() {
     } else if (onboardingDone && inOnboarding) {
       router.replace("/(tabs)");
     }
-  }, [isLoaded, isSignedIn, onboardingChecked, onboardingDone, segments]);
+  }, [isLoaded, isSignedIn, sessionId, onboardingChecked, onboardingDone, segments]);
 
   return (
     <OnboardingContext.Provider value={{ markOnboardingDone }}>

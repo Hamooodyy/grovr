@@ -9,10 +9,13 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  Alert,
+  Linking,
 } from "react-native";
 import {
   getOnboarding,
   updateOnboarding,
+  deleteAccount,
   type OnboardingData,
 } from "../../lib/api";
 import { colors, fonts, type as typ, radii, layout } from "../../lib/theme";
@@ -77,7 +80,7 @@ const RESTRICTIONS = [
 ] as const;
 
 export default function ProfileScreen() {
-  const { getToken } = useAuth();
+  const { getToken, signOut, sessionId } = useAuth();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
 
@@ -131,8 +134,8 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchProfile();
-    }, [fetchProfile])
+      if (sessionId) fetchProfile();
+    }, [fetchProfile, sessionId])
   );
 
   async function save(updates: Record<string, unknown>) {
@@ -228,6 +231,40 @@ export default function ProfileScreen() {
       ...next.map((p) => ({ preference: p, type: "restriction" })),
     ];
     save({ preferences: prefs });
+  }
+
+  function handleSignOut() {
+    Alert.alert("Sign out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign out",
+        onPress: () => signOut(),
+      },
+    ]);
+  }
+
+  function handleDeleteAccount() {
+    Alert.alert(
+      "Delete account",
+      "This will permanently delete your account and all your data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await getTokenRef.current();
+              if (!token) return;
+              await deleteAccount(token);
+              await signOut();
+            } catch {
+              setToast("Failed to delete account");
+            }
+          },
+        },
+      ]
+    );
   }
 
   if (loading) {
@@ -357,6 +394,26 @@ export default function ProfileScreen() {
             />
           ))}
         </View>
+
+        {/* Account actions */}
+        <View style={styles.accountSection}>
+          <Pressable
+            style={styles.accountRow}
+            onPress={() => Linking.openURL("https://grovr.app/privacy")}
+          >
+            <Text style={styles.accountRowText}>Privacy policy</Text>
+            <Text style={styles.accountRowArrow}>→</Text>
+          </Pressable>
+
+          <Pressable style={styles.accountRow} onPress={handleSignOut}>
+            <Text style={styles.accountRowText}>Sign out</Text>
+            <Text style={styles.accountRowArrow}>→</Text>
+          </Pressable>
+
+          <Pressable style={styles.deleteRow} onPress={handleDeleteAccount}>
+            <Text style={styles.deleteRowText}>Delete account</Text>
+          </Pressable>
+        </View>
       </ScrollView>
 
       <Toast message={toast} visible={!!toast} onDismiss={() => setToast("")} />
@@ -431,5 +488,38 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
     marginTop: 12,
+  },
+  accountSection: {
+    marginTop: 40,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    paddingTop: 20,
+  },
+  accountRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  accountRowText: {
+    fontFamily: fonts.body,
+    fontSize: 16,
+    color: colors.text,
+  },
+  accountRowArrow: {
+    fontFamily: fonts.body,
+    fontSize: 16,
+    color: colors.neutral[500],
+  },
+  deleteRow: {
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  deleteRowText: {
+    fontFamily: fonts.body,
+    fontSize: 16,
+    color: "#b91c1c",
   },
 });

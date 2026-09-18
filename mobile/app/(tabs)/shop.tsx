@@ -46,7 +46,7 @@ const UNITS = [
 
 export default function ShopScreen() {
   const router = useRouter();
-  const { getToken } = useAuth();
+  const { getToken, sessionId } = useAuth();
   const [items, setItems] = useState<ShoppingListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -74,8 +74,8 @@ export default function ShopScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchItems();
-    }, [fetchItems])
+      if (sessionId) fetchItems();
+    }, [fetchItems, sessionId])
   );
 
   const CATEGORY_LABELS: Record<string, string> = {

@@ -78,7 +78,7 @@ const UNITS = [
 ];
 
 export default function PantryScreen() {
-  const { getToken } = useAuth();
+  const { getToken, sessionId } = useAuth();
   const [items, setItems] = useState<PantryItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>("fridge");
@@ -112,7 +112,7 @@ export default function PantryScreen() {
   }, []);
 
   useFocusEffect(
-    useCallback(() => { fetchItems(); }, [fetchItems])
+    useCallback(() => { if (sessionId) fetchItems(); }, [fetchItems, sessionId])
   );
 
   function getCategory(item: PantryItemResponse): string {
