@@ -18,14 +18,17 @@ import { RefreshCw } from "lucide-react-native";
 import {
   suggestRecipes,
   getSavedRecipes,
+  getPantryItems,
   deleteSavedRecipe,
   deductPantryItems,
   submitRecipeFeedback,
   getRecipeFeedback,
   type RecipeResponse,
   type SavedRecipeResponse,
+  type PantryItemResponse,
   type FeedbackItem,
 } from "../../lib/api";
+import { hasEnough } from "../../lib/units";
 import { colors, fonts, type as typ, radii, shadows, layout } from "../../lib/theme";
 import { Card } from "../../components/Card";
 import { Tag } from "../../components/Tag";
@@ -53,6 +56,7 @@ export default function RecipesScreen() {
 
   const [recipes, setRecipesState] = useState<RecipeResponse[]>(cachedRecipes);
   const [saved, setSaved] = useState<SavedRecipeResponse[]>([]);
+  const [pantryData, setPantryData] = useState<PantryItemResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasGenerated, setHasGeneratedState] = useState(cachedHasGenerated);
   const [filter, setFilter] = useState<Filter>("For you");
@@ -95,21 +99,23 @@ export default function RecipesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      async function loadSaved() {
+      async function loadSavedAndPantry() {
         try {
           const token = await getTokenRef.current();
           if (!token) return;
-          const [savedData, feedbackData] = await Promise.all([
+          const [savedData, feedbackData, pantryData] = await Promise.all([
             getSavedRecipes(token),
             getRecipeFeedback(token),
+            getPantryItems(token),
           ]);
           setSaved(savedData.recipes);
+          setPantryData(pantryData.items);
           const map: Record<string, "like" | "dislike"> = {};
           feedbackData.feedback.forEach((f: FeedbackItem) => { map[f.recipeTitle] = f.feedback; });
           setFeedbackMap(map);
         } catch { /* ignore */ }
       }
-      if (sessionId) loadSaved();
+      if (sessionId) loadSavedAndPantry();
     }, [sessionId])
   );
 
@@ -290,8 +296,22 @@ export default function RecipesScreen() {
     item: RecipeResponse | SavedRecipeResponse;
     index: number;
   }) {
-    const inKitchen = item.ingredients.filter((i) => i.inPantry).length;
-    const needMore = item.ingredients.filter((i) => !i.inPantry).length;
+    // Recompute inPantry from live pantry data — checks quantity, not just existence
+    const ingredients = pantryData.length > 0
+      ? item.ingredients.map((ing) => {
+          const name = ing.name.toLowerCase().trim();
+          const match = pantryData.find((p) => {
+            const pName = (p.canonicalName ?? p.name).toLowerCase().trim();
+            return pName === name || pName.includes(name) || name.includes(pName);
+          });
+          const inPantry = match
+            ? hasEnough(match.quantity, match.unit, ing.quantity, ing.unit)
+            : false;
+          return { ...ing, inPantry };
+        })
+      : item.ingredients;
+    const inKitchen = ingredients.filter((i) => i.inPantry).length;
+    const needMore = ingredients.filter((i) => !i.inPantry).length;
 
     const isSaved = filter === "Saved";
 

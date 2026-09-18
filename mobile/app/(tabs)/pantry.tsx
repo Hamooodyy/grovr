@@ -70,11 +70,11 @@ const QUANTITIES = [
 ];
 
 const UNITS = [
-  "ct", "small", "medium", "large",
+  "ct",
   "oz", "lbs", "g",
   "tsp", "tbsp", "cup", "fl oz", "pint", "quart", "gallon", "mL",
   "clove", "slice", "can", "stick", "head", "sprig",
-  "dozen", "pack", "bunch",
+  "dozen", "bunch",
 ];
 
 export default function PantryScreen() {
@@ -154,6 +154,16 @@ export default function PantryScreen() {
       setPickerUnit("ct");
       setShowAdd(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      if (data.merged) {
+        setToast(`Updated ${trimmed} quantity.`);
+      } else if (data.duplicate) {
+        Alert.alert(
+          "Duplicate entry",
+          `You already have ${trimmed} stored in ${data.existingUnit ?? "a different unit"}. Consider updating the existing entry to use the same unit.`,
+          [{ text: "Got it" }]
+        );
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to add item";
       Alert.alert("Error", msg);

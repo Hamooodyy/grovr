@@ -37,11 +37,11 @@ const QUANTITIES = [
   0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 24, 32, 48, 64,
 ];
 const UNITS = [
-  "ct", "small", "medium", "large",
+  "ct",
   "oz", "lbs", "g",
   "tsp", "tbsp", "cup", "fl oz", "pint", "quart", "gallon", "mL",
   "clove", "slice", "can", "stick", "head", "sprig",
-  "dozen", "pack", "bunch",
+  "dozen", "bunch",
 ];
 
 export default function ShopScreen() {
@@ -55,6 +55,9 @@ export default function ShopScreen() {
   const [pickerUnit, setPickerUnit] = useState("ct");
   const [adding, setAdding] = useState(false);
   const [toast, setToast] = useState("");
+
+  // "All done" modal state
+  const [doneSection, setDoneSection] = useState<{ items: ShoppingListItem[]; isRecipe: boolean } | null>(null);
 
   // "Bought extra?" modal state
   const [extraItem, setExtraItem] = useState<ShoppingListItem | null>(null);
@@ -173,38 +176,7 @@ export default function ShopScreen() {
       ? items.filter((i) => i.recipeTitle === sectionTitle)
       : items.filter((i) => !i.recipeTitle);
 
-    if (!isRecipe) {
-      // Ungrouped items — just offer "Add to kitchen"
-      Alert.alert(
-        "All items checked",
-        "Add these to your kitchen?",
-        [
-          { text: "Not yet", style: "cancel" },
-          {
-            text: "Add to kitchen",
-            onPress: () => addItemsToKitchenAndClear(sectionItems),
-          },
-        ]
-      );
-      return;
-    }
-
-    // Recipe section — offer two paths
-    Alert.alert(
-      "All done!",
-      "Did you already cook this, or just stocking up?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Just bought",
-          onPress: () => addItemsToKitchenAndClear(sectionItems),
-        },
-        {
-          text: "Bought & cooked",
-          onPress: () => handleBoughtAndCooked(sectionItems),
-        },
-      ]
-    );
+    setDoneSection({ items: sectionItems, isRecipe });
   }
 
   // "Just bought" — add items to kitchen, clear section
@@ -216,7 +188,7 @@ export default function ShopScreen() {
       const token = await getTokenRef.current();
       if (!token) return;
       // Add all to kitchen in parallel
-      await Promise.all(
+      const results = await Promise.all(
         sectionItems.map((i) => {
           const qty = i.quantity ? parseFloat(i.quantity) : 1;
           return addPantryItem(token, {
@@ -228,7 +200,14 @@ export default function ShopScreen() {
       );
       // Delete from shopping list
       await Promise.all(sectionItems.map((i) => deleteShoppingItem(token, i.id)));
-      setToast("Added to kitchen");
+
+      const duplicates = results.filter((r) => r.duplicate);
+      if (duplicates.length > 0) {
+        const names = duplicates.map((_, idx) => sectionItems[results.indexOf(_)].name).join(", ");
+        setToast(`Added to kitchen. ${names} stored in different units.`);
+      } else {
+        setToast("Added to kitchen");
+      }
     } catch {
       fetchItems();
     }
@@ -553,6 +532,51 @@ export default function ShopScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* All done modal */}
+      <Modal visible={doneSection !== null} transparent animationType="slide">
+        <View style={styles.sheetOverlay}>
+          <Pressable style={styles.sheetBackdrop} onPress={() => setDoneSection(null)} />
+          <View style={styles.sheetContent}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>All done!</Text>
+            <Text style={styles.sheetNote}>
+              {doneSection?.isRecipe
+                ? "Did you already cook this, or just stocking up?"
+                : "Add these to your kitchen?"}
+            </Text>
+            <View style={styles.sheetActions}>
+              {doneSection?.isRecipe ? (
+                <>
+                  <Button
+                    title="Just bought"
+                    onPress={() => {
+                      if (doneSection) addItemsToKitchenAndClear(doneSection.items);
+                      setDoneSection(null);
+                    }}
+                  />
+                  <Button
+                    title="Bought and cooked"
+                    variant="secondary"
+                    onPress={() => {
+                      if (doneSection) handleBoughtAndCooked(doneSection.items);
+                      setDoneSection(null);
+                    }}
+                  />
+                </>
+              ) : (
+                <Button
+                  title="Add to kitchen"
+                  onPress={() => {
+                    if (doneSection) addItemsToKitchenAndClear(doneSection.items);
+                    setDoneSection(null);
+                  }}
+                />
+              )}
+            </View>
+          </View>
+        </View>
       </Modal>
 
       <Toast message={toast} visible={!!toast} onDismiss={() => setToast("")} />

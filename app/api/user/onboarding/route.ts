@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { userProfiles, userFoodPreferences, pantryItems } from "@/lib/db/schema";
+import { userProfiles, userFoodPreferences } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { inferCategory, computeExpiry, computeStatus } from "@/lib/freshness";
-import type { PantryCategory } from "@/lib/types";
 
 /**
  * GET /api/user/onboarding
@@ -106,28 +104,6 @@ export async function PUT(request: Request) {
           preference: p.preference,
           type: p.type,
         }))
-      );
-    }
-  }
-
-  // Insert pantry items if provided
-  if (body.pantryItems !== undefined && Array.isArray(body.pantryItems)) {
-    if (body.pantryItems.length > 0) {
-      const now = new Date();
-      await db.insert(pantryItems).values(
-        body.pantryItems.map((item: { name: string; category?: string }) => {
-          const canonicalName = item.name.toLowerCase().trim();
-          const category: PantryCategory = (item.category as PantryCategory) ?? inferCategory(canonicalName);
-          const estimatedExpiry = computeExpiry(now, canonicalName, category);
-          return {
-            userId: profile.id,
-            name: item.name,
-            canonicalName,
-            category,
-            estimatedExpiry,
-            status: computeStatus(estimatedExpiry),
-          };
-        })
       );
     }
   }

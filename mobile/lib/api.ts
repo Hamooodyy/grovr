@@ -90,7 +90,7 @@ export async function getPantryItems(
 export async function addPantryItem(
   token: string,
   data: { name: string; category?: string; quantity: number; unit: string }
-): Promise<{ item: PantryItemResponse }> {
+): Promise<{ item: PantryItemResponse; merged?: boolean; duplicate?: boolean; existingUnit?: string | null }> {
   return apiFetch("/api/pantry", token, {
     method: "POST",
     body: JSON.stringify(data),

@@ -123,11 +123,15 @@ RULES:
 - Suggest recipes that match their favorite cuisines and cooking style
 - Recipes MUST respect their cook time preference — if they like quick meals, don't suggest a 2-hour braise
 - NEVER include ingredients or foods they hate
-- DO NOT limit yourself to only what's in the kitchen. Use the inventory as a starting point, but freely add whatever ingredients make the recipe great
 - NEVER use expired ingredients. If ingredients are marked [USE TODAY] or [use soon], try to use them in at least 1-2 recipes to reduce waste
 - Mark each ingredient as inPantry: true if it matches something in the inventory above, false if they need to buy it
 - Include a good variety — different cuisines, proteins, and cooking styles
 - Keep it practical — home cooking, not restaurant-level
+
+RECIPE MIX (critical):
+- Recipes 1-${Math.floor(recipeCount / 2)}: PANTRY recipes. Build these around what's in the kitchen inventory above. Use as many existing ingredients as possible, and only add a few extras
+- Recipes ${Math.floor(recipeCount / 2) + 1}-${recipeCount}: DISCOVERY recipes. These must IGNORE the kitchen inventory entirely. Suggest completely new dishes with ingredients the user does NOT already have. Think of these as "what if you tried something totally different." Do not force-include pantry items in these — treat them as if the kitchen is empty and recommend based only on their cuisine preferences and cooking style
+- Vary proteins, cuisines, and cooking styles across all ${recipeCount} recipes
 
 INGREDIENT FORMATTING (critical):
 - "name" must be a plain grocery item name — exactly what you'd see on a shelf or shopping list
@@ -137,7 +141,7 @@ INGREDIENT FORMATTING (critical):
 - NO descriptive modifiers like "fresh", "assorted", "quality", "good". Only include modifiers that distinguish the product (e.g. "red bell pepper" vs "green bell pepper")
 - If a recipe needs multiple colors/types, list each as a separate ingredient with its own quantity (e.g. 1 red bell pepper + 1 green bell pepper, NOT "2 assorted bell peppers")
 - "quantity" must be a number as a string (e.g. "1", "0.5", "2")
-- "unit" must be one of: ct, small, medium, large, oz, lbs, g, tsp, tbsp, cup, fl oz, pint, quart, gallon, mL, clove, slice, can, stick, head, sprig, dozen, pack, bunch
+- "unit" must be one of: ct, oz, lbs, g, tsp, tbsp, cup, fl oz, pint, quart, gallon, mL, clove, slice, can, stick, head, sprig, dozen, bunch
 - Prep details (slicing, dicing, marinating) belong in the instructions, NOT in the ingredient name
 
 Return ONLY valid JSON matching this schema:

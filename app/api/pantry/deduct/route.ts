@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { userProfiles, pantryItems } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { normalizeUnit, convertUnits, sameFamily } from "@/lib/units";
 
 // Staples that don't get deducted — you don't "run out" of these from one recipe
 const STAPLES = new Set([
@@ -15,35 +16,6 @@ const STAPLES = new Set([
   "vinegar", "soy sauce", "hot sauce",
 ]);
 
-const UNIT_ALIASES: Record<string, string> = {
-  tablespoon: "tbsp", tablespoons: "tbsp",
-  teaspoon: "tsp", teaspoons: "tsp",
-  ounce: "oz", ounces: "oz",
-  pound: "lbs", pounds: "lbs", lb: "lbs",
-  gram: "g", grams: "g",
-  cup: "cup", cups: "cup",
-  pint: "pint", pints: "pint",
-  quart: "quart", quarts: "quart",
-  gallon: "gallon", gallons: "gallon",
-  milliliter: "mL", milliliters: "mL", ml: "mL",
-  clove: "clove", cloves: "clove",
-  slice: "slice", slices: "slice",
-  can: "can", cans: "can",
-  stick: "stick", sticks: "stick",
-  head: "head", heads: "head",
-  sprig: "sprig", sprigs: "sprig",
-  bunch: "bunch", bunches: "bunch",
-  dozen: "dozen",
-  pack: "pack", packs: "pack",
-  count: "ct", piece: "ct", pieces: "ct",
-  small: "small", medium: "medium", large: "large",
-  "fl oz": "fl oz", "fluid ounce": "fl oz", "fluid ounces": "fl oz",
-};
-
-function normalizeUnit(unit: string): string {
-  const lower = unit.toLowerCase().trim();
-  return UNIT_ALIASES[lower] ?? lower;
-}
 
 async function getProfile(userId: string) {
   return db
@@ -99,11 +71,26 @@ export async function POST(request: Request) {
     );
     if (!match) continue;
 
-    const recipeQty = parseFloat(ing.quantity) || 0;
+    // Null quantity means 0 — remove the item
+    if (match.quantity == null || match.quantity <= 0) {
+      await db
+        .delete(pantryItems)
+        .where(and(eq(pantryItems.id, match.id), eq(pantryItems.userId, profile.id)));
+      removed.push(match.name);
+      continue;
+    }
 
-    const unitsMatch = match.unit && ing.unit && normalizeUnit(match.unit) === normalizeUnit(ing.unit);
-    if (unitsMatch && match.quantity != null && recipeQty > 0) {
-      // Units match — subtract
+    const recipeQty = parseFloat(ing.quantity) || 0;
+    if (!match.unit || !ing.unit || recipeQty <= 0) {
+      skipped.push({ name: match.name, pantryUnit: match.unit, recipeUnit: ing.unit });
+      continue;
+    }
+
+    const pantryUnit = normalizeUnit(match.unit);
+    const recipeUnit = normalizeUnit(ing.unit);
+
+    if (pantryUnit === recipeUnit) {
+      // Exact unit match — subtract directly
       const remaining = match.quantity - recipeQty;
       if (remaining <= 0) {
         await db
@@ -113,12 +100,32 @@ export async function POST(request: Request) {
       } else {
         await db
           .update(pantryItems)
-          .set({ quantity: remaining })
+          .set({ quantity: Math.round(remaining * 100) / 100 })
+          .where(and(eq(pantryItems.id, match.id), eq(pantryItems.userId, profile.id)));
+        deducted.push(match.name);
+      }
+    } else if (sameFamily(pantryUnit, recipeUnit)) {
+      // Same family (e.g., lbs vs g, dozen vs ct) — convert recipe qty to pantry unit
+      const convertedRecipeQty = convertUnits(recipeQty, recipeUnit, pantryUnit);
+      if (convertedRecipeQty == null) {
+        skipped.push({ name: match.name, pantryUnit: match.unit, recipeUnit: ing.unit });
+        continue;
+      }
+      const remaining = match.quantity - convertedRecipeQty;
+      if (remaining <= 0) {
+        await db
+          .delete(pantryItems)
+          .where(and(eq(pantryItems.id, match.id), eq(pantryItems.userId, profile.id)));
+        removed.push(match.name);
+      } else {
+        await db
+          .update(pantryItems)
+          .set({ quantity: Math.round(remaining * 100) / 100 })
           .where(and(eq(pantryItems.id, match.id), eq(pantryItems.userId, profile.id)));
         deducted.push(match.name);
       }
     } else {
-      // Units don't match or no quantity — skip, don't delete
+      // Incompatible unit families — skip
       skipped.push({ name: match.name, pantryUnit: match.unit, recipeUnit: ing.unit });
     }
   }

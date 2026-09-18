@@ -24,16 +24,12 @@ export default function ReadyScreen() {
     dislikes: string;
     cookingTimes: string;
     servingSize: string;
-    pantryItems: string;
   }>();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [recipe, setRecipe] = useState<RecipeResponse | null>(null);
   const [adding, setAdding] = useState(false);
-
-  const pantryItems: string[] = JSON.parse(params.pantryItems || "[]");
-  const hasPantry = pantryItems.length > 0;
 
   useEffect(() => {
     run();
@@ -61,10 +57,6 @@ export default function ReadyScreen() {
         cookingTimes,
         servingSize: params.servingSize,
         preferences,
-        pantryItems: pantryItems.map((name) => ({
-          name,
-          category: "other",
-        })),
         onboardingDone: true,
       });
 
@@ -142,10 +134,10 @@ export default function ReadyScreen() {
         />
 
         <Text style={styles.headline}>
-          {hasPantry ? "Here's what we'd cook tonight." : "Here's something to start with."}
+          Here's something to start with.
         </Text>
         <Text style={styles.sub}>
-          {"Based on what's in your kitchen and what you like."}
+          Based on what you like.
         </Text>
 
         {recipe && (

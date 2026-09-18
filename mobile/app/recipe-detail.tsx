@@ -18,6 +18,7 @@ import {
   saveRecipe,
 } from "../lib/api";
 import { colors, fonts, type as typ, radii, layout } from "../lib/theme";
+import { normalizeUnit, hasEnough } from "../lib/units";
 import { Tag } from "../components/Tag";
 import { Button } from "../components/Button";
 import { Toast } from "../components/Toast";
@@ -75,70 +76,54 @@ export default function RecipeDetailScreen() {
     );
   }
 
-  const inKitchen = recipe.ingredients?.filter((i) => i.inPantry) ?? [];
-  const needToBuy = recipe.ingredients?.filter((i) => !i.inPantry) ?? [];
-
-  // Normalize unit aliases so "tablespoon" matches "tbsp", etc.
-  const UNIT_ALIASES: Record<string, string> = {
-    tablespoon: "tbsp", tablespoons: "tbsp",
-    teaspoon: "tsp", teaspoons: "tsp",
-    ounce: "oz", ounces: "oz",
-    pound: "lbs", pounds: "lbs", lb: "lbs",
-    gram: "g", grams: "g",
-    cup: "cup", cups: "cup",
-    pint: "pint", pints: "pint",
-    quart: "quart", quarts: "quart",
-    gallon: "gallon", gallons: "gallon",
-    milliliter: "mL", milliliters: "mL", ml: "mL",
-    clove: "clove", cloves: "clove",
-    slice: "slice", slices: "slice",
-    can: "can", cans: "can",
-    stick: "stick", sticks: "stick",
-    head: "head", heads: "head",
-    sprig: "sprig", sprigs: "sprig",
-    bunch: "bunch", bunches: "bunch",
-    dozen: "dozen",
-    pack: "pack", packs: "pack",
-    count: "ct", piece: "ct", pieces: "ct",
-    small: "small", medium: "medium", large: "large",
-    "fl oz": "fl oz", "fluid ounce": "fl oz", "fluid ounces": "fl oz",
-  };
-
-  function normalizeUnit(unit: string): string {
-    const lower = unit.toLowerCase().trim();
-    return UNIT_ALIASES[lower] ?? lower;
+  // Recompute inPantry from live pantry data — checks quantity, not just existence
+  function findPantryMatch(name: string) {
+    const lower = name.toLowerCase().trim();
+    return pantryItems.find((p) => {
+      const pName = (p.canonicalName ?? p.name).toLowerCase().trim();
+      return pName === lower || pName.includes(lower) || lower.includes(pName);
+    });
   }
+
+  const ingredients = (recipe.ingredients ?? []).map((ing) => {
+    const match = findPantryMatch(ing.name);
+    const inPantry = match
+      ? hasEnough(match.quantity, match.unit, ing.quantity, ing.unit)
+      : ing.inPantry && pantryItems.length === 0; // fall back to LLM value only if no pantry loaded
+    return { ...ing, inPantry };
+  });
+
+  const inKitchen = ingredients.filter((i) => i.inPantry);
+  const needToBuy = ingredients.filter((i) => !i.inPantry);
 
   // Check for unit mismatches between recipe and pantry
   function hasUnitMismatch(ingredientName: string, recipeUnit: string): boolean {
-    const canonical = ingredientName.toLowerCase().trim();
-    const match = pantryItems.find(
-      (p) =>
-        p.canonicalName === canonical ||
-        p.canonicalName.includes(canonical) ||
-        canonical.includes(p.canonicalName)
-    );
+    const match = findPantryMatch(ingredientName);
     if (!match || !match.unit || !recipeUnit) return false;
     return normalizeUnit(match.unit) !== normalizeUnit(recipeUnit);
   }
 
   async function handleAddMissing() {
-    if (needToBuy.length === 0) return;
     setAddingToList(true);
     try {
       const token = await getToken();
       if (!token) return;
-      const items = needToBuy.map((i) => ({
-        name: i.name,
-        quantity: i.quantity,
-        unit: i.unit,
-        recipeTitle: recipe!.title,
-      }));
-      await Promise.all([
-        addToShoppingList(token, items),
-        saveRecipe(token, recipe!),
-      ]);
-      setToast("Recipe saved and ingredients added to list.");
+      if (needToBuy.length > 0) {
+        const items = needToBuy.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          unit: i.unit,
+          recipeTitle: recipe!.title,
+        }));
+        await Promise.all([
+          addToShoppingList(token, items),
+          saveRecipe(token, recipe!),
+        ]);
+        setToast("Recipe saved and ingredients added to list.");
+      } else {
+        await saveRecipe(token, recipe!);
+        setToast("Recipe saved.");
+      }
       setTimeout(() => router.back(), 1200);
     } catch {
       // ignore
@@ -267,14 +252,14 @@ export default function RecipeDetailScreen() {
         <View style={styles.ctas}>
           <Button
             title={
-              needToBuy.length > 0
-                ? addingToList
-                  ? "Adding..."
-                  : `Add ${needToBuy.length} missing to list`
-                : "You have everything"
+              addingToList
+                ? "Saving..."
+                : needToBuy.length > 0
+                ? `Add ${needToBuy.length} missing to list`
+                : "Save recipe"
             }
             onPress={handleAddMissing}
-            disabled={needToBuy.length === 0 || addingToList}
+            disabled={addingToList}
           />
           <Button
             title={cooking ? "Updating..." : "I cooked this"}

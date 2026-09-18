@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { userProfiles, pantryItems } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { computeExpiry, computeStatus, inferCategory } from "@/lib/freshness";
+import { normalizeUnit } from "@/lib/units";
 import type { PantryCategory } from "@/lib/types";
 
 async function getProfile(userId: string) {
@@ -56,7 +57,20 @@ export async function GET() {
     .from(pantryItems)
     .where(eq(pantryItems.userId, profile.id));
 
-  return NextResponse.json({ items: items.map(serializeItem) });
+  // Clean up any items with null/zero quantity (legacy data)
+  const nullQtyIds = items
+    .filter((i) => i.quantity == null || i.quantity <= 0)
+    .map((i) => i.id);
+  if (nullQtyIds.length > 0) {
+    await Promise.all(
+      nullQtyIds.map((id) =>
+        db.delete(pantryItems).where(and(eq(pantryItems.id, id), eq(pantryItems.userId, profile.id)))
+      )
+    );
+  }
+
+  const valid = items.filter((i) => i.quantity != null && i.quantity > 0);
+  return NextResponse.json({ items: valid.map(serializeItem) });
 }
 
 /**
@@ -75,6 +89,9 @@ export async function POST(request: Request) {
   if (!name) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
+  if (body.quantity == null || typeof body.quantity !== "number" || body.quantity <= 0) {
+    return NextResponse.json({ error: "Quantity is required" }, { status: 400 });
+  }
 
   const canonicalName = name.toLowerCase();
   const category: PantryCategory = body.category ?? inferCategory(canonicalName);
@@ -86,9 +103,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
 
-  // Check for existing item with same name and unit — merge quantities
-  const newUnit = body.unit ?? null;
-  const existing = await db
+  // Check for existing items with the same canonical name
+  const rawUnit = body.unit ?? null;
+  const newUnit = rawUnit ? normalizeUnit(rawUnit) : null;
+  const existingRows = await db
     .select()
     .from(pantryItems)
     .where(
@@ -96,20 +114,30 @@ export async function POST(request: Request) {
         eq(pantryItems.userId, profile.id),
         eq(pantryItems.canonicalName, canonicalName)
       )
-    )
-    .then((rows) =>
-      rows.find((r) => (r.unit ?? null) === newUnit) ?? null
     );
 
-  if (existing && body.quantity != null) {
-    const mergedQty = (existing.quantity ?? 0) + body.quantity;
-    await db
-      .update(pantryItems)
-      .set({ quantity: mergedQty })
-      .where(eq(pantryItems.id, existing.id));
-    const updated = { ...existing, quantity: mergedQty };
-    return NextResponse.json({ item: serializeItem(updated) });
+  const sameUnit = existingRows.find((r) => {
+    const existingNorm = r.unit ? normalizeUnit(r.unit) : null;
+    return existingNorm === newUnit;
+  }) ?? null;
+
+  // Same name AND same unit → merge quantities (or just return existing if no qty to add)
+  if (sameUnit) {
+    if (body.quantity != null) {
+      const mergedQty = (sameUnit.quantity ?? 0) + body.quantity;
+      await db
+        .update(pantryItems)
+        .set({ quantity: mergedQty, unit: newUnit ?? sameUnit.unit })
+        .where(eq(pantryItems.id, sameUnit.id));
+      const updated = { ...sameUnit, quantity: mergedQty };
+      return NextResponse.json({ item: serializeItem(updated), merged: true });
+    }
+    // No quantity provided — item already exists, skip duplicate insert
+    return NextResponse.json({ item: serializeItem(sameUnit), merged: true });
   }
+
+  // Same name but different unit → insert but flag as duplicate
+  const hasDifferentUnit = existingRows.length > 0 && !sameUnit;
 
   const inserted = await db
     .insert(pantryItems)
@@ -119,14 +147,18 @@ export async function POST(request: Request) {
       canonicalName,
       category,
       quantity: body.quantity ?? null,
-      unit: newUnit,
+      unit: newUnit, // already normalized
       addedAt,
       estimatedExpiry,
       status: computeStatus(estimatedExpiry),
     })
     .returning();
 
-  return NextResponse.json({ item: serializeItem(inserted[0]) });
+  return NextResponse.json({
+    item: serializeItem(inserted[0]),
+    duplicate: hasDifferentUnit,
+    existingUnit: hasDifferentUnit ? (existingRows[0].unit ?? null) : null,
+  });
 }
 
 /**
