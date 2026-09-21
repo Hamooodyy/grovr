@@ -14,7 +14,7 @@ import {
   Modal,
 } from "react-native";
 import { GestureHandlerRootView, Swipeable } from "react-native-gesture-handler";
-import { RefreshCw } from "lucide-react-native";
+import { RefreshCw, ThumbsUp, ThumbsDown } from "lucide-react-native";
 import {
   suggestRecipes,
   getSavedRecipes,
@@ -271,6 +271,31 @@ export default function RecipesScreen() {
     } catch { /* ignore */ }
   }
 
+  async function handleForYouFeedback(title: string, type: "like" | "dislike") {
+    // Toggle off if already set to the same value
+    const current = feedbackMap[title];
+    if (current === type) {
+      setFeedbackMap((prev) => {
+        const next = { ...prev };
+        delete next[title];
+        return next;
+      });
+      try {
+        const token = await getTokenRef.current();
+        if (!token) return;
+        await submitRecipeFeedback(token, title, type); // toggles off on backend
+      } catch { /* ignore */ }
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setFeedbackMap((prev) => ({ ...prev, [title]: type }));
+    try {
+      const token = await getTokenRef.current();
+      if (!token) return;
+      await submitRecipeFeedback(token, title, type);
+    } catch { /* ignore */ }
+  }
+
   function renderSwipeAction(index: number) {
     return (
       <Pressable
@@ -325,7 +350,7 @@ export default function RecipesScreen() {
                 {item.cookTime} · {item.difficulty} · {item.servings} servings
               </Text>
             </View>
-            {isSaved && (
+            {isSaved ? (
               <Pressable
                 style={styles.cookedBtn}
                 onPress={(e) => {
@@ -336,6 +361,37 @@ export default function RecipesScreen() {
               >
                 <Text style={styles.cookedBtnText}>Cooked?</Text>
               </Pressable>
+            ) : (
+              <View style={styles.feedbackIcons}>
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleForYouFeedback(item.title, "dislike");
+                  }}
+                  hitSlop={6}
+                >
+                  <ThumbsDown
+                    size={18}
+                    strokeWidth={2}
+                    color={feedbackMap[item.title] === "dislike" ? colors.cta.DEFAULT : colors.neutral[400]}
+                    fill={feedbackMap[item.title] === "dislike" ? colors.cta.DEFAULT : "none"}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleForYouFeedback(item.title, "like");
+                  }}
+                  hitSlop={6}
+                >
+                  <ThumbsUp
+                    size={18}
+                    strokeWidth={2}
+                    color={feedbackMap[item.title] === "like" ? colors.cta.DEFAULT : colors.neutral[400]}
+                    fill={feedbackMap[item.title] === "like" ? colors.cta.DEFAULT : "none"}
+                  />
+                </Pressable>
+              </View>
             )}
           </View>
           <View style={styles.cardTags}>
@@ -574,6 +630,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
+  },
+  feedbackIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 2,
   },
   cookedBtn: {
     backgroundColor: colors.cta.DEFAULT,
