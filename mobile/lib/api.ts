@@ -146,9 +146,10 @@ export async function suggestRecipes(
   token: string,
   options?: { count?: number; exclude?: string[]; ingredient?: string }
 ): Promise<{ recipes: RecipeResponse[] }> {
+  const localHour = new Date().getHours();
   return apiFetch("/api/recipes/suggest", token, {
     method: "POST",
-    body: JSON.stringify(options ?? {}),
+    body: JSON.stringify({ ...options, localHour }),
   });
 }
 
