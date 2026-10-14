@@ -31,6 +31,13 @@
           "backgroundColor": "#f5ead8"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d93aad22-c12a-4083-99c8-0ec156c1fec1"
+      }
+    },
+    "owner": "hamoodyyy"
   }
 }
