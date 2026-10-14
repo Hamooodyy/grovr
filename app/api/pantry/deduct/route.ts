@@ -16,6 +16,19 @@ const STAPLES = new Set([
   "vinegar", "soy sauce", "hot sauce",
 ]);
 
+type PantryRow = typeof pantryItems.$inferSelect;
+
+/** Finds the kitchen item for a recipe ingredient: exact name, then singular/plural, then partial. */
+function findMatch(canonical: string, items: PantryRow[]): PantryRow | undefined {
+  const singular = (s: string) => (s.endsWith("s") ? s.slice(0, -1) : s);
+  return (
+    items.find((item) => item.canonicalName === canonical) ??
+    items.find((item) => singular(item.canonicalName) === singular(canonical)) ??
+    items.find(
+      (item) => item.canonicalName.includes(canonical) || canonical.includes(item.canonicalName)
+    )
+  );
+}
 
 async function getProfile(userId: string) {
   return db
@@ -29,7 +42,9 @@ async function getProfile(userId: string) {
 /**
  * POST /api/pantry/deduct
  * Subtracts recipe ingredients from the user's pantry.
- * Body: { ingredients: Array<{ name, quantity, unit, inPantry }> }
+ * Matches against the current kitchen, not the recipe's inPantry flag (which is an LLM guess
+ * frozen at generation/save time).
+ * Body: { ingredients: Array<{ name, quantity, unit }> }
  */
 export async function POST(request: Request) {
   const { userId } = await auth();
@@ -46,9 +61,9 @@ export async function POST(request: Request) {
   const ingredients: Array<{ name: string; quantity: string; unit: string; inPantry: boolean }> =
     body.ingredients ?? [];
 
-  // Only deduct ingredients that are in the pantry and not staples
+  // Staples aren't deducted
   const toDeduct = ingredients.filter(
-    (ing) => ing.inPantry && !STAPLES.has(ing.name.toLowerCase().trim())
+    (ing) => !STAPLES.has(ing.name.toLowerCase().trim())
   );
 
   const userItems = await db
@@ -62,13 +77,7 @@ export async function POST(request: Request) {
 
   for (const ing of toDeduct) {
     const canonical = ing.name.toLowerCase().trim();
-    // Find matching pantry item by name
-    const match = userItems.find(
-      (item) =>
-        item.canonicalName === canonical ||
-        item.canonicalName.includes(canonical) ||
-        canonical.includes(item.canonicalName)
-    );
+    const match = findMatch(canonical, userItems);
     if (!match) continue;
 
     // Null quantity means 0 — remove the item
