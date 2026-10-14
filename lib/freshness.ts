@@ -202,9 +202,20 @@ const SPICE_KEYWORDS = [
   "spice",
 ];
 
+// Fresh produce whose names contain a spice keyword (e.g. "pepper") — checked first
+const FRESH_PRODUCE_KEYWORDS = [
+  "bell pepper",
+  "green pepper",
+  "jalapeno",
+  "jalapeño",
+  "poblano",
+  "serrano",
+];
+
 export function inferCategory(canonicalName: string): PantryCategory {
   const name = canonicalName.toLowerCase();
 
+  if (FRESH_PRODUCE_KEYWORDS.some((kw) => name.includes(kw))) return "fridge";
   if (SPICE_KEYWORDS.some((kw) => name.includes(kw))) return "spice";
   if (FRIDGE_KEYWORDS.some((kw) => name.includes(kw))) return "fridge";
   return "pantry";
@@ -212,12 +223,21 @@ export function inferCategory(canonicalName: string): PantryCategory {
 
 /**
  * Returns the estimated shelf life in days for an item.
+ * Matches overrides by singular or plural name ("bell pepper" ↔ "bell peppers").
  */
 export function getShelfLifeDays(
   canonicalName: string,
   category: PantryCategory
 ): number {
-  return ITEM_SHELF_LIFE[canonicalName] ?? SHELF_LIFE_DAYS[category];
+  const name = canonicalName.toLowerCase().trim();
+  const singular = name.endsWith("s") ? name.slice(0, -1) : name;
+  return (
+    ITEM_SHELF_LIFE[name] ??
+    ITEM_SHELF_LIFE[`${name}s`] ??
+    ITEM_SHELF_LIFE[singular] ??
+    SHELF_LIFE_DAYS[category] ??
+    SHELF_LIFE_DAYS.pantry
+  );
 }
 
 /**
@@ -232,6 +252,20 @@ export function computeExpiry(
   const expiry = new Date(addedAt);
   expiry.setDate(expiry.getDate() + days);
   return expiry;
+}
+
+/**
+ * Expiry and status for a stored pantry item, computed from addedAt + current rules
+ * (not the stored estimatedExpiry) so rule fixes and category changes apply immediately.
+ */
+export function getItemFreshness(item: {
+  canonicalName: string;
+  category: string | null;
+  addedAt: Date;
+}): { estimatedExpiry: Date; status: PantryItemStatus } {
+  const category = (item.category as PantryCategory | null) ?? inferCategory(item.canonicalName);
+  const estimatedExpiry = computeExpiry(item.addedAt, item.canonicalName, category);
+  return { estimatedExpiry, status: computeStatus(estimatedExpiry) };
 }
 
 /**

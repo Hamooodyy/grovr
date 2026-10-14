@@ -285,10 +285,10 @@ export default function ShopScreen() {
         ungrouped.push(item);
       }
     }
-    const result: Array<{ title: string; data: ShoppingListItem[] }> = [];
-    if (ungrouped.length > 0) result.push({ title: "Items", data: ungrouped });
+    const result: Array<{ title: string; isRecipe: boolean; data: ShoppingListItem[] }> = [];
+    if (ungrouped.length > 0) result.push({ title: "General grocery", isRecipe: false, data: ungrouped });
     for (const [title, data] of Object.entries(groups)) {
-      result.push({ title, data });
+      result.push({ title, isRecipe: true, data });
     }
     return result;
   })();
@@ -449,7 +449,7 @@ export default function ShopScreen() {
               const allChecked =
                 section.data.length > 0 &&
                 section.data.every((i) => i.checked);
-              const isRecipe = section.title !== "Items";
+              const isRecipe = section.isRecipe;
               return (
                 <View style={styles.sectionHeader}>
                   <Text style={[styles.sectionLabel, { flex: 1 }]}>{section.title.toUpperCase()}</Text>

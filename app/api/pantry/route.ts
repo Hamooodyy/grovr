@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { userProfiles, pantryItems } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { computeExpiry, computeStatus, inferCategory } from "@/lib/freshness";
+import { computeExpiry, computeStatus, getItemFreshness, inferCategory } from "@/lib/freshness";
 import { normalizeUnit } from "@/lib/units";
 import type { PantryCategory } from "@/lib/types";
 
@@ -22,6 +22,7 @@ function serializeItem(item: typeof pantryItems.$inferSelect) {
   const category = VALID_CATEGORIES.includes(item.category as string)
     ? item.category
     : inferCategory(item.canonicalName);
+  const { estimatedExpiry, status } = getItemFreshness({ ...item, category });
   return {
     id: item.id,
     name: item.name,
@@ -30,10 +31,8 @@ function serializeItem(item: typeof pantryItems.$inferSelect) {
     quantity: item.quantity,
     unit: item.unit,
     addedAt: item.addedAt,
-    estimatedExpiry: item.estimatedExpiry,
-    status: item.estimatedExpiry
-      ? computeStatus(item.estimatedExpiry)
-      : (item.status as string),
+    estimatedExpiry,
+    status,
   };
 }
 

@@ -130,6 +130,36 @@ export default function PantryScreen() {
     });
 
   const totalItems = items.length;
+  const expiredItems = items.filter((i) => i.status === "expired");
+
+  function handleClearExpired() {
+    const count = expiredItems.length;
+    Alert.alert(
+      `Clear ${count} expired item${count === 1 ? "" : "s"}?`,
+      "This removes expired items from your fridge, pantry, and spice rack.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: async () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            const ids = new Set(expiredItems.map((i) => i.id));
+            setItems((prev) => prev.filter((i) => !ids.has(i.id)));
+            try {
+              const token = await getTokenRef.current();
+              if (!token) return;
+              await Promise.all(expiredItems.map((i) => deletePantryItem(token, i.id, "expired")));
+              setToast(`Cleared ${count} expired item${count === 1 ? "" : "s"}.`);
+            } catch {
+              setToast("Failed to clear some items");
+              fetchItems();
+            }
+          },
+        },
+      ]
+    );
+  }
 
   async function handleAdd() {
     const trimmed = newName.trim();
@@ -210,6 +240,7 @@ export default function PantryScreen() {
         )
       );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      fetchItems(); // category change can change freshness status
     } catch {
       Alert.alert("Error", "Failed to update");
     } finally {
@@ -382,6 +413,16 @@ export default function PantryScreen() {
         <Text style={styles.disclaimer}>
           Freshness is estimated. Trust your eyes and nose.
         </Text>
+      )}
+
+      {expiredItems.length > 0 && (
+        <View style={styles.footer}>
+          <Button
+            title={`Clear ${expiredItems.length} expired`}
+            variant="secondary"
+            onPress={handleClearExpired}
+          />
+        </View>
       )}
 
       {/* Edit sheet */}
@@ -568,6 +609,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   // Disclaimer
+  footer: {
+    paddingHorizontal: layout.screenGutter,
+    paddingBottom: 16,
+  },
   disclaimer: {
     fontFamily: fonts.body,
     fontSize: 12,

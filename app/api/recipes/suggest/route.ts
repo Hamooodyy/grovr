@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import { db } from "@/lib/db";
 import { userProfiles, userFoodPreferences, pantryItems, recipeFeedback } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { computeStatus } from "@/lib/freshness";
+import { getItemFreshness } from "@/lib/freshness";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -73,12 +73,9 @@ export async function POST(request: Request) {
 
   // Build pantry summary — exclude expired items entirely
   const pantryList = items
-    .filter((item) => {
-      const status = item.estimatedExpiry ? computeStatus(item.estimatedExpiry) : "fresh";
-      return status !== "expired";
-    })
-    .map((item) => {
-      const status = item.estimatedExpiry ? computeStatus(item.estimatedExpiry) : "fresh";
+    .map((item) => ({ item, status: getItemFreshness(item).status }))
+    .filter(({ status }) => status !== "expired")
+    .map(({ item, status }) => {
       const qty = item.quantity && item.unit ? `${item.quantity} ${item.unit}` : "";
       const urgency =
         status === "urgent" ? " [USE TODAY]" :
