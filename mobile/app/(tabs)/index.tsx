@@ -62,6 +62,7 @@ export default function HomeScreen() {
   const [error, setError] = useState(false);
   const [pantry, setPantry] = useState<PantryItemResponse[]>([]);
   const [recipes, setRecipes] = useState<RecipeResponse[]>([]);
+  const [recipesLoading, setRecipesLoading] = useState(false);
   const [toast, setToast] = useState("");
 
   // Expired items don't count — recipes ignore them
@@ -94,15 +95,16 @@ export default function HomeScreen() {
       const token = await getTokenRef.current();
       if (!token) return;
 
-      // Load separately so a recipe failure doesn't hide the kitchen state
-      const [pantryResult, recipeResult] = await Promise.allSettled([
-        getPantryItems(token),
-        suggestRecipes(token, { count: 2 }),
-      ]);
-      if (pantryResult.status === "rejected") throw pantryResult.reason;
+      // Recipes take ~20-30s with gpt-6-luna — load them in the background so Home
+      // renders as soon as the kitchen loads, and a recipe failure never blocks it
+      setRecipesLoading(true);
+      suggestRecipes(token, { count: 2 })
+        .then((data) => setRecipes(data.recipes))
+        .catch(() => setRecipes([]))
+        .finally(() => setRecipesLoading(false));
 
-      setPantry(pantryResult.value.items);
-      setRecipes(recipeResult.status === "fulfilled" ? recipeResult.value.recipes : []);
+      const pantryData = await getPantryItems(token);
+      setPantry(pantryData.items);
     } catch {
       setError(true);
     } finally {
@@ -218,7 +220,7 @@ export default function HomeScreen() {
         )}
 
         {/* Tonight's Picks */}
-        {recipes.length > 0 && (
+        {(recipesLoading || recipes.length > 0) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
               {hasPantry ? "Tonight's picks" : "Based on your tastes"}
@@ -228,6 +230,12 @@ export default function HomeScreen() {
                 ? "Based on what's in your kitchen."
                 : "Add items to your kitchen for better picks."}
             </Text>
+            {recipesLoading && (
+              <View style={styles.picksLoading}>
+                <ActivityIndicator color={colors.cta.DEFAULT} />
+                <Text style={styles.picksLoadingText}>Finding tonight's picks...</Text>
+              </View>
+            )}
             {recipes.map((recipe) => {
               const inKitchen = recipe.ingredients.filter((i) => i.inPantry).length;
               const needMore = recipe.ingredients.filter((i) => !i.inPantry).length;
@@ -333,6 +341,17 @@ const styles = StyleSheet.create({
     ...typ.h4,
     color: colors.text,
     marginBottom: 4,
+  },
+  picksLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 18,
+  },
+  picksLoadingText: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.neutral[600],
   },
   sectionNote: {
     fontFamily: fonts.body,

@@ -6,14 +6,19 @@ import { userProfiles, userFoodPreferences, pantryItems, recipeFeedback } from "
 import { eq } from "drizzle-orm";
 import { getItemFreshness } from "@/lib/freshness";
 
+// gpt-6-luna takes ~20-35s for a 4-recipe batch, so allow up to 60s on Vercel
+export const maxDuration = 60;
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  timeout: 25000,
+  // One attempt that finishes before Vercel's 60s limit (SDK retries would overrun it)
+  timeout: 55000,
+  maxRetries: 0,
 });
 
 /**
  * POST /api/recipes/suggest
- * Uses GPT-4o to suggest recipes based on pantry items and user preferences.
+ * Uses GPT-6 Luna to suggest recipes based on pantry items and user preferences.
  */
 export async function POST(request: Request) {
   const { userId } = await auth();
@@ -163,11 +168,13 @@ Return ONLY valid JSON matching this schema:
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-6-luna",
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },
       temperature: 1.0,
-      max_tokens: recipeCount === 1 ? 1000 : 3000,
+      // Fastest thinking level Luna supports; the token budget includes its hidden reasoning
+      reasoning_effort: "low",
+      max_completion_tokens: recipeCount === 1 ? 2000 : 6000,
     });
 
     const content = completion.choices[0]?.message?.content;

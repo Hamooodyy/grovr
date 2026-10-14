@@ -2,7 +2,7 @@ import { ClerkProvider, useAuth } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { createContext, useContext, useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { useFonts, Caprasimo_400Regular } from "@expo-google-fonts/caprasimo";
 import {
   Figtree_400Regular,
@@ -10,7 +10,8 @@ import {
   Figtree_700Bold,
 } from "@expo-google-fonts/figtree";
 import { getOnboarding } from "../lib/api";
-import { colors } from "../lib/theme";
+import { colors, type as typ } from "../lib/theme";
+import { Button } from "../components/Button";
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
@@ -35,6 +36,8 @@ function AuthGate() {
   const router = useRouter();
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [onboardingDone, setOnboardingDone] = useState(false);
+  // Onboarding check failed (network/server) — don't assume a new user and send them to onboarding
+  const [onboardingError, setOnboardingError] = useState(false);
 
   function markOnboardingDone() {
     setOnboardingDone(true);
@@ -58,6 +61,7 @@ function AuthGate() {
 
     // User is signed in — check onboarding status
     if (!onboardingChecked) {
+      if (onboardingError) return;
       getToken()
         .then((token) => {
           if (!token) return;
@@ -69,8 +73,7 @@ function AuthGate() {
           setOnboardingChecked(true);
         })
         .catch(() => {
-          setOnboardingDone(false);
-          setOnboardingChecked(true);
+          setOnboardingError(true);
         });
       return;
     }
@@ -90,7 +93,18 @@ function AuthGate() {
     } else if (onboardingDone && inOnboarding) {
       router.replace("/(tabs)");
     }
-  }, [isLoaded, isSignedIn, sessionId, onboardingChecked, onboardingDone, segments]);
+  }, [isLoaded, isSignedIn, sessionId, onboardingChecked, onboardingDone, onboardingError, segments]);
+
+  if (onboardingError) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32, backgroundColor: colors.bg }}>
+        <Text style={{ ...typ.h3, color: colors.text, textAlign: "center", marginBottom: 20 }}>
+          Couldn't connect
+        </Text>
+        <Button title="Try again" onPress={() => setOnboardingError(false)} />
+      </View>
+    );
+  }
 
   return (
     <OnboardingContext.Provider value={{ markOnboardingDone }}>
