@@ -57,13 +57,6 @@ export async function POST(request: Request) {
     db.select().from(recipeFeedback).where(eq(recipeFeedback.userId, profile.id)),
   ]);
 
-  if (items.length === 0) {
-    return NextResponse.json(
-      { error: "Add some items to your kitchen first" },
-      { status: 400 }
-    );
-  }
-
   const likes = preferences.filter((p) => p.type === "like").map((p) => p.preference);
   const dislikes = preferences.filter((p) => p.type === "dislike").map((p) => p.preference);
   const restrictions = preferences.filter((p) => p.type === "restriction").map((p) => p.preference);
@@ -112,7 +105,7 @@ The user is looking for ${mealType} ideas right now. All recipes should be appro
 ${mustUseIngredient ? `\nIMPORTANT: Every recipe MUST use "${mustUseIngredient}" as a key ingredient. The user specifically wants to cook with this.\n` : ""}${excludeTitles.length > 0 ? `\nDO NOT suggest any of these recipes (already shown):\n${excludeTitles.map((t) => `- ${t}`).join("\n")}\n` : ""}
 
 KITCHEN INVENTORY (what they already have):
-${pantryList.join("\n")}
+${pantryList.length > 0 ? pantryList.join("\n") : "(empty — nothing usable in their kitchen right now)"}
 
 USER PROFILE:
 - Serves: ${servings} people
@@ -135,9 +128,10 @@ RULES:
 - Be creative — put a fresh spin on familiar dishes. Vary flavor profiles, spice levels, and techniques so each batch feels different from the last
 
 RECIPE MIX (critical):
-- Recipes 1-${Math.floor(recipeCount / 2)}: PANTRY recipes. Build these around what's in the kitchen inventory above. Use as many existing ingredients as possible, and only add a few extras
+${pantryList.length === 0 ? `- The kitchen is empty, so ALL ${recipeCount} recipes are DISCOVERY recipes based on their cuisine preferences and cooking style. Mark every ingredient inPantry: false
+` : `- Recipes 1-${Math.floor(recipeCount / 2)}: PANTRY recipes. Build these around what's in the kitchen inventory above. Use as many existing ingredients as possible, and only add a few extras
 - Recipes ${Math.floor(recipeCount / 2) + 1}-${recipeCount}: DISCOVERY recipes. These must IGNORE the kitchen inventory entirely. Suggest completely new dishes with ingredients the user does NOT already have. Think of these as "what if you tried something totally different." Do not force-include pantry items in these — treat them as if the kitchen is empty and recommend based only on their cuisine preferences and cooking style
-- Vary proteins, cuisines, and cooking styles across all ${recipeCount} recipes
+`}- Vary proteins, cuisines, and cooking styles across all ${recipeCount} recipes
 
 INGREDIENT FORMATTING (critical):
 - "name" must be a plain grocery item name — exactly what you'd see on a shelf or shopping list

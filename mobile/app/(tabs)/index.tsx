@@ -64,7 +64,10 @@ export default function HomeScreen() {
   const [recipes, setRecipes] = useState<RecipeResponse[]>([]);
   const [toast, setToast] = useState("");
 
-  const hasPantry = pantry.length > 0;
+  // Expired items don't count — recipes ignore them
+  const usableCount = pantry.filter((i) => i.status !== "expired").length;
+  const hasPantry = usableCount > 0;
+  const isBareKitchen = usableCount < 5;
 
   const useSoon = pantry
     .filter((i) => i.status === "use_soon" || i.status === "urgent")
@@ -91,13 +94,15 @@ export default function HomeScreen() {
       const token = await getTokenRef.current();
       if (!token) return;
 
-      const [pantryData, recipeData] = await Promise.all([
+      // Load separately so a recipe failure doesn't hide the kitchen state
+      const [pantryResult, recipeResult] = await Promise.allSettled([
         getPantryItems(token),
         suggestRecipes(token, { count: 2 }),
       ]);
+      if (pantryResult.status === "rejected") throw pantryResult.reason;
 
-      setPantry(pantryData.items);
-      setRecipes(recipeData.recipes);
+      setPantry(pantryResult.value.items);
+      setRecipes(recipeResult.status === "fulfilled" ? recipeResult.value.recipes : []);
     } catch {
       setError(true);
     } finally {
@@ -164,6 +169,23 @@ export default function HomeScreen() {
             : "Add a few items to your kitchen and we'll pick better recipes. For now, these match your tastes."}
         </Text>
 
+        {/* Empty or nearly empty kitchen */}
+        {isBareKitchen && (
+          <View style={styles.emptyBlock}>
+            <Text style={styles.sectionTitle}>
+              {hasPantry ? "Your kitchen is looking bare" : "Your kitchen is empty"}
+            </Text>
+            <View style={styles.emptyActions}>
+              <Button title="Add to my kitchen" onPress={() => router.push("/(tabs)/pantry")} />
+              <Button
+                title="Explore recipes"
+                variant="secondary"
+                onPress={() => router.push("/(tabs)/recipes")}
+              />
+            </View>
+          </View>
+        )}
+
         {/* Use Soon */}
         {hasPantry && useSoon.length > 0 && (
           <View style={styles.section}>
@@ -196,48 +218,50 @@ export default function HomeScreen() {
         )}
 
         {/* Tonight's Picks */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            {hasPantry ? "Tonight's picks" : "Based on your tastes"}
-          </Text>
-          <Text style={styles.sectionNote}>
-            {hasPantry
-              ? "Based on what's in your kitchen."
-              : "Add items to your kitchen for better picks."}
-          </Text>
-          {recipes.map((recipe) => {
-            const inKitchen = recipe.ingredients.filter((i) => i.inPantry).length;
-            const needMore = recipe.ingredients.filter((i) => !i.inPantry).length;
-            return (
-              <Pressable
-                key={recipe.title}
-                onPress={() =>
-                  router.push({
-                    pathname: "/recipe-detail",
-                    params: { recipe: JSON.stringify(recipe) },
-                  })
-                }
-              >
-                <Card elevation="sm" style={styles.recipeCard}>
-                  <Text style={styles.recipeTitle}>{recipe.title}</Text>
-                  <Text style={styles.recipeMeta}>
-                    {recipe.cookTime} · {recipe.difficulty} · {recipe.servings} servings
-                  </Text>
-                  <View style={styles.recipeTags}>
-                    <Tag
-                      label={`${inKitchen} in your kitchen`}
-                      variant="accent2"
-                    />
-                    <Tag
-                      label={needMore > 0 ? `Need ${needMore} more` : "You have everything"}
-                      variant={needMore > 0 ? "accent" : "accent2"}
-                    />
-                  </View>
-                </Card>
-              </Pressable>
-            );
-          })}
-        </View>
+        {recipes.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {hasPantry ? "Tonight's picks" : "Based on your tastes"}
+            </Text>
+            <Text style={styles.sectionNote}>
+              {hasPantry
+                ? "Based on what's in your kitchen."
+                : "Add items to your kitchen for better picks."}
+            </Text>
+            {recipes.map((recipe) => {
+              const inKitchen = recipe.ingredients.filter((i) => i.inPantry).length;
+              const needMore = recipe.ingredients.filter((i) => !i.inPantry).length;
+              return (
+                <Pressable
+                  key={recipe.title}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/recipe-detail",
+                      params: { recipe: JSON.stringify(recipe) },
+                    })
+                  }
+                >
+                  <Card elevation="sm" style={styles.recipeCard}>
+                    <Text style={styles.recipeTitle}>{recipe.title}</Text>
+                    <Text style={styles.recipeMeta}>
+                      {recipe.cookTime} · {recipe.difficulty} · {recipe.servings} servings
+                    </Text>
+                    <View style={styles.recipeTags}>
+                      <Tag
+                        label={`${inKitchen} in your kitchen`}
+                        variant="accent2"
+                      />
+                      <Tag
+                        label={needMore > 0 ? `Need ${needMore} more` : "You have everything"}
+                        variant={needMore > 0 ? "accent" : "accent2"}
+                      />
+                    </View>
+                  </Card>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
 
         {/* Running Low */}
         {hasPantry && runningLow.length > 0 && (
@@ -365,6 +389,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
+  },
+  emptyBlock: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    padding: 16,
+    marginBottom: 24,
+  },
+  emptyActions: {
+    gap: 10,
+    marginTop: 14,
   },
   runningLowBlock: {
     backgroundColor: colors.surface,
