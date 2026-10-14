@@ -185,6 +185,7 @@ export interface FeedbackItem {
   id: number;
   recipeTitle: string;
   feedback: "like" | "dislike";
+  reason: string | null;
 }
 
 export async function getRecipeFeedback(
@@ -196,11 +197,12 @@ export async function getRecipeFeedback(
 export async function submitRecipeFeedback(
   token: string,
   recipeTitle: string,
-  feedback: "like" | "dislike"
+  feedback: "like" | "dislike",
+  reason?: string
 ): Promise<{ created?: boolean; updated?: boolean; removed?: boolean; feedback?: string }> {
   return apiFetch("/api/recipes/feedback", token, {
     method: "POST",
-    body: JSON.stringify({ recipeTitle, feedback }),
+    body: JSON.stringify({ recipeTitle, feedback, reason }),
   });
 }
 

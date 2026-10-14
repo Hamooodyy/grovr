@@ -1,6 +1,7 @@
 export { Button } from "./Button";
 export { OptionRow } from "./OptionRow";
 export { Chip } from "./Chip";
+export { DislikeReasonSheet } from "./DislikeReasonSheet";
 export { PillInput } from "./PillInput";
 export { Tag } from "./Tag";
 export { Card } from "./Card";

@@ -125,6 +125,7 @@ export const recipeFeedback = pgTable(
       .references(() => userProfiles.id, { onDelete: "cascade" }),
     recipeTitle: text("recipe_title").notNull(),
     feedback: text("feedback").notNull(), // 'like' | 'dislike'
+    reason: text("reason"), // optional "why" for dislikes, fed into the recipe prompt
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

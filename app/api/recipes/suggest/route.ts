@@ -69,7 +69,9 @@ export async function POST(request: Request) {
   const restrictions = preferences.filter((p) => p.type === "restriction").map((p) => p.preference);
 
   const likedRecipes = feedback.filter((f) => f.feedback === "like").map((f) => f.recipeTitle);
-  const dislikedRecipes = feedback.filter((f) => f.feedback === "dislike").map((f) => f.recipeTitle);
+  const dislikedRecipes = feedback
+    .filter((f) => f.feedback === "dislike")
+    .map((f) => (f.reason ? `${f.recipeTitle} — reason: ${f.reason}` : f.recipeTitle));
 
   // Build pantry summary — exclude expired items entirely
   const pantryList = items
@@ -120,7 +122,7 @@ ${likes.length > 0 ? `- Favorite cuisines: ${likes.join(", ")}` : ""}
 ${dislikes.length > 0 ? `- Ingredients/foods they HATE (never include these): ${dislikes.join(", ")}` : ""}
 ${restrictions.length > 0 ? `- Dietary restrictions: ${restrictions.join(", ")}` : ""}
 ${likedRecipes.length > 0 ? `\nPAST RECIPES THEY LIKED (suggest similar styles):\n${likedRecipes.map((r) => `- ${r}`).join("\n")}` : ""}
-${dislikedRecipes.length > 0 ? `\nPAST RECIPES THEY DISLIKED (avoid similar styles):\n${dislikedRecipes.map((r) => `- ${r}`).join("\n")}` : ""}
+${dislikedRecipes.length > 0 ? `\nPAST RECIPES THEY DISLIKED (avoid similar styles; when a reason is given, avoid that specific issue, not the whole cuisine or dish type):\n${dislikedRecipes.map((r) => `- ${r}`).join("\n")}` : ""}
 
 RULES:
 - Suggest recipes that match their favorite cuisines and cooking style

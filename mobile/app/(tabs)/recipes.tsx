@@ -34,6 +34,7 @@ import { Card } from "../../components/Card";
 import { Tag } from "../../components/Tag";
 import { Chip } from "../../components/Chip";
 import { Button } from "../../components/Button";
+import { DislikeReasonSheet } from "../../components/DislikeReasonSheet";
 
 const FILTERS = ["For you", "Saved"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -65,6 +66,8 @@ export default function RecipesScreen() {
   const [feedbackMap, setFeedbackMap] = useState<Record<string, "like" | "dislike">>({});
   const [refreshingIndex, setRefreshingIndex] = useState<number | null>(null);
   const [feedbackItem, setFeedbackItem] = useState<SavedRecipeResponse | null>(null);
+  // Recipe awaiting a "why" for a thumbs-down (cooked = came from the "How was it?" sheet)
+  const [dislikeTarget, setDislikeTarget] = useState<{ title: string; cooked?: SavedRecipeResponse } | null>(null);
 
   // Sync state setters with module-level cache
   function setRecipes(updater: RecipeResponse[] | ((prev: RecipeResponse[]) => RecipeResponse[])) {
@@ -256,7 +259,7 @@ export default function RecipesScreen() {
     setFeedbackItem(item);
   }
 
-  async function finishCooked(item: SavedRecipeResponse, type: "like" | "dislike") {
+  async function finishCooked(item: SavedRecipeResponse, type: "like" | "dislike", reason?: string) {
     setFeedbackItem(null);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSaved((prev) => prev.filter((r) => r.id !== item.id));
@@ -265,7 +268,7 @@ export default function RecipesScreen() {
       const token = await getTokenRef.current();
       if (!token) return;
       await Promise.all([
-        submitRecipeFeedback(token, item.title, type),
+        submitRecipeFeedback(token, item.title, type, reason),
         deductPantryItems(token, item.ingredients),
         deleteSavedRecipe(token, item.id),
       ]);
@@ -288,13 +291,36 @@ export default function RecipesScreen() {
       } catch { /* ignore */ }
       return;
     }
+    // Thumbs-down asks why before saving
+    if (type === "dislike") {
+      setDislikeTarget({ title });
+      return;
+    }
+    await applyFeedback(title, type);
+  }
+
+  async function applyFeedback(title: string, type: "like" | "dislike", reason?: string) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setFeedbackMap((prev) => ({ ...prev, [title]: type }));
     try {
       const token = await getTokenRef.current();
       if (!token) return;
-      await submitRecipeFeedback(token, title, type);
+      await submitRecipeFeedback(token, title, type, reason);
     } catch { /* ignore */ }
+  }
+
+  function handleDislikeReason(reason?: string) {
+    const target = dislikeTarget;
+    setDislikeTarget(null);
+    if (!target) return;
+    if (target.cooked) finishCooked(target.cooked, "dislike", reason);
+    else applyFeedback(target.title, "dislike", reason);
+  }
+
+  function handleNotForMe(item: SavedRecipeResponse) {
+    setFeedbackItem(null);
+    // Let the "How was it?" sheet finish closing before presenting the next one
+    setTimeout(() => setDislikeTarget({ title: item.title, cooked: item }), 400);
   }
 
   function renderSwipeAction(index: number) {
@@ -514,7 +540,7 @@ export default function RecipesScreen() {
             <View style={styles.feedbackRow}>
               <Pressable
                 style={styles.feedbackOption}
-                onPress={() => feedbackItem && finishCooked(feedbackItem, "dislike")}
+                onPress={() => feedbackItem && handleNotForMe(feedbackItem)}
               >
                 <Text style={styles.feedbackEmoji}>👎</Text>
                 <Text style={styles.feedbackLabel}>Not for me</Text>
@@ -537,6 +563,10 @@ export default function RecipesScreen() {
           </View>
         </View>
       </Modal>
+      <DislikeReasonSheet
+        recipeTitle={dislikeTarget?.title ?? null}
+        onDone={handleDislikeReason}
+      />
     </GestureHandlerRootView>
   );
 }

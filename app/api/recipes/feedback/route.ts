@@ -38,6 +38,7 @@ export async function GET() {
       id: f.id,
       recipeTitle: f.recipeTitle,
       feedback: f.feedback,
+      reason: f.reason,
     })),
   });
 }
@@ -45,7 +46,7 @@ export async function GET() {
 /**
  * POST /api/recipes/feedback
  * Saves or updates feedback for a recipe.
- * Body: { recipeTitle: string, feedback: "like" | "dislike" }
+ * Body: { recipeTitle: string, feedback: "like" | "dislike", reason?: string }
  */
 export async function POST(request: Request) {
   const { userId } = await auth();
@@ -62,6 +63,11 @@ export async function POST(request: Request) {
   if (!body.recipeTitle || !body.feedback) {
     return NextResponse.json({ error: "recipeTitle and feedback required" }, { status: 400 });
   }
+  // Reasons only apply to dislikes; cap length since it goes into the LLM prompt
+  const reason: string | null =
+    body.feedback === "dislike" && typeof body.reason === "string" && body.reason.trim()
+      ? body.reason.trim().slice(0, 300)
+      : null;
 
   // Check if feedback already exists for this recipe
   const existing = await db
@@ -77,7 +83,7 @@ export async function POST(request: Request) {
     .then((rows) => rows[0] ?? null);
 
   if (existing) {
-    if (existing.feedback === body.feedback) {
+    if (existing.feedback === body.feedback && !reason) {
       // Same feedback — remove it (toggle off)
       await db.delete(recipeFeedback).where(eq(recipeFeedback.id, existing.id));
       return NextResponse.json({ removed: true });
@@ -85,7 +91,7 @@ export async function POST(request: Request) {
     // Different feedback — update
     await db
       .update(recipeFeedback)
-      .set({ feedback: body.feedback })
+      .set({ feedback: body.feedback, reason })
       .where(eq(recipeFeedback.id, existing.id));
     return NextResponse.json({ updated: true, feedback: body.feedback });
   }
@@ -95,6 +101,7 @@ export async function POST(request: Request) {
     userId: profile.id,
     recipeTitle: body.recipeTitle,
     feedback: body.feedback,
+    reason,
   });
 
   return NextResponse.json({ created: true, feedback: body.feedback });
