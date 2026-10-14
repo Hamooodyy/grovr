@@ -67,6 +67,8 @@ export default function RecipesScreen() {
   const [searching, setSearching] = useState(false);
   const [feedbackMap, setFeedbackMap] = useState<Record<string, "like" | "dislike">>({});
   const [refreshingIndex, setRefreshingIndex] = useState<number | null>(null);
+  // Last generate/search failed — show a retry instead of a dead-end "No results"
+  const [loadError, setLoadError] = useState(false);
   const [feedbackItem, setFeedbackItem] = useState<SavedRecipeResponse | null>(null);
   // Recipe awaiting a "why" for a thumbs-down (cooked = came from the "How was it?" sheet)
   const [dislikeTarget, setDislikeTarget] = useState<{ title: string; cooked?: SavedRecipeResponse } | null>(null);
@@ -164,10 +166,11 @@ export default function RecipesScreen() {
 
   async function handleGenerate() {
     setLoading(true);
+    setLoadError(false);
     startLoadingAnimation();
     try {
       const token = await getTokenRef.current();
-      if (!token) return;
+      if (!token) throw new Error("Not signed in");
       const exclude = recipes.map((r) => r.title);
       const data = await suggestRecipes(token, { exclude });
       finishLoadingAnimation();
@@ -175,7 +178,9 @@ export default function RecipesScreen() {
       setRecipes(data.recipes);
       setHasGenerated(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch { /* ignore */ } finally {
+    } catch {
+      setLoadError(true);
+    } finally {
       setLoading(false);
       setLoadingStage(0);
       progressAnim.setValue(0);
@@ -240,16 +245,19 @@ export default function RecipesScreen() {
     setFilter("For you");
     startLoadingAnimation();
     setLoading(true);
+    setLoadError(false);
     try {
       const token = await getTokenRef.current();
-      if (!token) return;
+      if (!token) throw new Error("Not signed in");
       const data = await suggestRecipes(token, { ingredient: trimmed });
       finishLoadingAnimation();
       await new Promise((r) => setTimeout(r, 400));
       setRecipes(data.recipes);
       setHasGenerated(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch { /* ignore */ } finally {
+    } catch {
+      setLoadError(true);
+    } finally {
       setLoading(false);
       setSearching(false);
       setLoadingStage(0);
@@ -524,7 +532,12 @@ export default function RecipesScreen() {
         </View>
       </View>
 
-      {!hasGenerated && filtered.length === 0 ? (
+      {!hasGenerated && filtered.length === 0 && loadError && filter === "For you" ? (
+        <View style={styles.center}>
+          <Text style={styles.emptyTitle}>Couldn't load recipes</Text>
+          <Button title="Try again" onPress={handleGenerate} style={{ marginTop: 12 }} />
+        </View>
+      ) : !hasGenerated && filtered.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.emptyTitle}>No results</Text>
           <Text style={styles.emptyBody}>
