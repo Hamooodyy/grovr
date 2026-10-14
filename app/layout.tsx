@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Raleway } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const raleway = Raleway({
@@ -23,7 +24,10 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en" className={`h-full ${raleway.variable}`}>
-        <body className="h-full">{children}</body>
+        <body className="h-full">
+          {children}
+          <Analytics />
+        </body>
       </html>
     </ClerkProvider>
   );
