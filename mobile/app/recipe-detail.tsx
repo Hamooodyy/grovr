@@ -16,6 +16,7 @@ import {
   addToShoppingList,
   deductPantryItems,
   saveRecipe,
+  markRecipeCooked,
 } from "../lib/api";
 import { colors, fonts, type as typ, radii, layout } from "../lib/theme";
 import { normalizeUnit, hasEnough } from "../lib/units";
@@ -137,10 +138,12 @@ export default function RecipeDetailScreen() {
     try {
       const token = await getToken();
       if (!token) return;
-      // Save the recipe first
-      await saveRecipe(token, recipe!);
-      // Deduct pantry items
-      await deductPantryItems(token, recipe!.ingredients);
+      // Already in the cookbook → mark that copy cooked; otherwise save it straight into Cooked
+      const savedId = (recipe as { id?: number }).id;
+      await Promise.all([
+        savedId ? markRecipeCooked(token, savedId) : saveRecipe(token, recipe!, { cooked: true }),
+        deductPantryItems(token, recipe!.ingredients),
+      ]);
       setToast("Kitchen updated. Enjoy!");
       setTimeout(() => router.back(), 1200);
     } catch {

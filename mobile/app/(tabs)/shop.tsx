@@ -39,7 +39,7 @@ const QUANTITIES = [
 const UNITS = [
   "ct",
   "oz", "lbs", "g",
-  "tsp", "tbsp", "cup", "fl oz", "pint", "quart", "gallon", "mL",
+  "tsp", "tbsp", "cup", "fl oz", "pint", "quart", "gallon", "mL", "L",
   "clove", "slice", "can", "stick", "head", "sprig",
   "dozen", "bunch",
 ];

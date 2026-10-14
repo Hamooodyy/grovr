@@ -13,6 +13,9 @@
       "deploymentTarget": "17.0",
       "config": {
         "usesNonExemptEncryption": false
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
       }
     },
     "experiments": {
@@ -39,6 +42,10 @@
         "projectId": "d93aad22-c12a-4083-99c8-0ec156c1fec1"
       }
     },
-    "owner": "hamoodyyy"
+    "owner": "hamoodyyy",
+    "updates": {
+      "url": "https://u.expo.dev/d93aad22-c12a-4083-99c8-0ec156c1fec1"
+    },
+    "android": {}
   }
 }

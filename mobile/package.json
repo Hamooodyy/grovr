@@ -17,6 +17,7 @@
     "expo-secure-store": "~57.0.4",
     "expo-splash-screen": "~57.0.10",
     "expo-status-bar": "~57.0.1",
+    "expo-updates": "~57.0.26",
     "lucide-react-native": "^1.43.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -36,7 +37,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "update:prod": "EXPO_PUBLIC_API_URL=https://grovr.app EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_Y2xlcmsuZ3JvdnIuYXBwJA npx eas-cli@latest update --channel production --environment production --platform ios --message \"$(git log -1 --pretty=%s)\""
   },
   "overrides": {
     "react-dom": "19.2.3"

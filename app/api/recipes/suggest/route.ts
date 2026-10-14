@@ -141,7 +141,7 @@ INGREDIENT FORMATTING (critical):
 - NO descriptive modifiers like "fresh", "assorted", "quality", "good". Only include modifiers that distinguish the product (e.g. "red bell pepper" vs "green bell pepper")
 - If a recipe needs multiple colors/types, list each as a separate ingredient with its own quantity (e.g. 1 red bell pepper + 1 green bell pepper, NOT "2 assorted bell peppers")
 - "quantity" must be a number as a string (e.g. "1", "0.5", "2")
-- "unit" must be one of: ct, oz, lbs, g, tsp, tbsp, cup, fl oz, pint, quart, gallon, mL, clove, slice, can, stick, head, sprig, dozen, bunch
+- "unit" must be one of: ct, oz, lbs, g, tsp, tbsp, cup, fl oz, pint, quart, gallon, mL, L, clove, slice, can, stick, head, sprig, dozen, bunch
 - Prep details (slicing, dicing, marinating) belong in the instructions, NOT in the ingredient name
 
 Return ONLY valid JSON matching this schema:

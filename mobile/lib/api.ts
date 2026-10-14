@@ -140,6 +140,7 @@ export interface RecipeResponse {
 export interface SavedRecipeResponse extends RecipeResponse {
   id: number;
   createdAt: string;
+  cookedAt: string | null;
 }
 
 export async function suggestRecipes(
@@ -161,11 +162,22 @@ export async function getSavedRecipes(
 
 export async function saveRecipe(
   token: string,
-  recipe: RecipeResponse
+  recipe: RecipeResponse,
+  options?: { cooked?: boolean }
 ): Promise<{ recipe: SavedRecipeResponse }> {
   return apiFetch("/api/recipes/save", token, {
     method: "POST",
-    body: JSON.stringify(recipe),
+    body: JSON.stringify({ ...recipe, cooked: options?.cooked }),
+  });
+}
+
+export async function markRecipeCooked(
+  token: string,
+  id: number
+): Promise<{ success: boolean }> {
+  return apiFetch("/api/recipes/save", token, {
+    method: "PATCH",
+    body: JSON.stringify({ id }),
   });
 }
 

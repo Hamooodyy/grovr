@@ -9,6 +9,7 @@ import {
   Pressable,
   StyleSheet,
   FlatList,
+  SectionList,
   ActivityIndicator,
   Animated,
   Modal,
@@ -20,6 +21,7 @@ import {
   getSavedRecipes,
   getPantryItems,
   deleteSavedRecipe,
+  markRecipeCooked,
   deductPantryItems,
   submitRecipeFeedback,
   getRecipeFeedback,
@@ -36,7 +38,7 @@ import { Chip } from "../../components/Chip";
 import { Button } from "../../components/Button";
 import { DislikeReasonSheet } from "../../components/DislikeReasonSheet";
 
-const FILTERS = ["For you", "Saved"] as const;
+const FILTERS = ["For you", "My cookbook"] as const;
 type Filter = (typeof FILTERS)[number];
 
 const LOADING_STAGES = [
@@ -113,6 +115,7 @@ export default function RecipesScreen() {
           ]);
           setSaved(savedData.recipes);
           setPantryData(pantryData.items);
+          replaceSavedForYou(savedData.recipes.map((r) => r.title));
           const map: Record<string, "like" | "dislike"> = {};
           feedbackData.feedback.forEach((f: FeedbackItem) => { map[f.recipeTitle] = f.feedback; });
           setFeedbackMap(map);
@@ -179,12 +182,24 @@ export default function RecipesScreen() {
     }
   }
 
-  async function handleRefreshRecipe(index: number) {
+  // Saved recipes move to My cookbook — swap each one out of For you for a fresh pick
+  async function replaceSavedForYou(savedTitles: string[]) {
+    const savedSet = new Set(savedTitles);
+    // cachedRecipes is always current, unlike the `recipes` captured by the focus callback
+    const indices = cachedRecipes
+      .map((r, i) => (savedSet.has(r.title) ? i : -1))
+      .filter((i) => i >= 0);
+    for (const index of indices) {
+      await handleRefreshRecipe(index, savedTitles);
+    }
+  }
+
+  async function handleRefreshRecipe(index: number, alsoExclude: string[] = []) {
     setRefreshingIndex(index);
     try {
       const token = await getTokenRef.current();
       if (!token) return;
-      const exclude = recipes.map((r) => r.title);
+      const exclude = [...cachedRecipes.map((r) => r.title), ...alsoExclude];
       const data = await suggestRecipes(token, { count: 1, exclude });
       if (data.recipes.length > 0) {
         setRecipes((prev) => prev.map((r, i) => (i === index ? data.recipes[0] : r)));
@@ -244,7 +259,7 @@ export default function RecipesScreen() {
 
   // Filter + search logic
   const allRecipes: (RecipeResponse | SavedRecipeResponse)[] =
-    filter === "Saved" ? saved : recipes;
+    filter === "My cookbook" ? saved : recipes;
 
   const filtered = allRecipes;
 
@@ -262,7 +277,13 @@ export default function RecipesScreen() {
   async function finishCooked(item: SavedRecipeResponse, type: "like" | "dislike", reason?: string) {
     setFeedbackItem(null);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setSaved((prev) => prev.filter((r) => r.id !== item.id));
+    // Liked (incl. "It was okay") → stays in the cookbook under Cooked; "Not for me" → removed
+    const keep = type === "like";
+    setSaved((prev) =>
+      keep
+        ? prev.map((r) => (r.id === item.id ? { ...r, cookedAt: new Date().toISOString() } : r))
+        : prev.filter((r) => r.id !== item.id)
+    );
     setFeedbackMap((prev) => ({ ...prev, [item.title]: type }));
     try {
       const token = await getTokenRef.current();
@@ -270,7 +291,7 @@ export default function RecipesScreen() {
       await Promise.all([
         submitRecipeFeedback(token, item.title, type, reason),
         deductPantryItems(token, item.ingredients),
-        deleteSavedRecipe(token, item.id),
+        keep ? markRecipeCooked(token, item.id) : deleteSavedRecipe(token, item.id),
       ]);
     } catch { /* ignore */ }
   }
@@ -365,7 +386,8 @@ export default function RecipesScreen() {
     const inKitchen = ingredients.filter((i) => i.inPantry).length;
     const needMore = ingredients.filter((i) => !i.inPantry).length;
 
-    const isSaved = filter === "Saved";
+    const isSaved = filter === "My cookbook";
+    const isCooked = isSaved && !!(item as SavedRecipeResponse).cookedAt;
 
     const cardContent = (
       <Pressable onPress={() => openDetail(item)}>
@@ -377,7 +399,7 @@ export default function RecipesScreen() {
                 {item.cookTime} · {item.difficulty} · {item.servings} servings
               </Text>
             </View>
-            {isSaved ? (
+            {isCooked ? null : isSaved ? (
               <Pressable
                 style={styles.cookedBtn}
                 onPress={(e) => {
@@ -509,6 +531,20 @@ export default function RecipesScreen() {
             Try a different search or filter.
           </Text>
         </View>
+      ) : filter === "My cookbook" ? (
+        <SectionList
+          sections={[
+            { title: "Not cooked yet", data: saved.filter((r) => !r.cookedAt) },
+            { title: "Cooked", data: saved.filter((r) => r.cookedAt) },
+          ].filter((section) => section.data.length > 0)}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderCard}
+          renderSectionHeader={({ section }) => (
+            <Text style={styles.cookbookHeader}>{section.title.toUpperCase()}</Text>
+          )}
+          stickySectionHeadersEnabled={false}
+          contentContainerStyle={styles.listContent}
+        />
       ) : (
         <FlatList
           data={filtered}
@@ -518,7 +554,7 @@ export default function RecipesScreen() {
           renderItem={renderCard}
           contentContainerStyle={styles.listContent}
           ListFooterComponent={
-            filter !== "Saved" && hasGenerated ? (
+            hasGenerated ? (
               <View style={styles.regenerateFooter}>
                 <Button
                   title="Regenerate recipes"
@@ -572,6 +608,15 @@ export default function RecipesScreen() {
 }
 
 const styles = StyleSheet.create({
+  cookbookHeader: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 12,
+    lineHeight: 14,
+    letterSpacing: 0.96,
+    color: colors.neutral[600],
+    marginTop: 8,
+    marginBottom: 10,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.bg,

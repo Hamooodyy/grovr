@@ -89,6 +89,7 @@ export const savedRecipes = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    cookedAt: timestamp("cooked_at", { withTimezone: true }), // null = in cookbook, not cooked yet
   },
   (table) => [index("idx_saved_recipes_user").on(table.userId)]
 );

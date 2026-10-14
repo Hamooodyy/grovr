@@ -44,13 +44,14 @@ export async function GET() {
       ingredients: r.ingredients,
       instructions: r.instructions,
       createdAt: r.createdAt,
+      cookedAt: r.cookedAt,
     })),
   });
 }
 
 /**
  * POST /api/recipes/save
- * Saves a recipe.
+ * Saves a recipe. Body: recipe fields, plus optional cooked: true to save it straight into "Cooked".
  */
 export async function POST(request: Request) {
   const { userId } = await auth();
@@ -79,10 +80,42 @@ export async function POST(request: Request) {
       servings: body.servings ?? null,
       ingredients: body.ingredients ?? [],
       instructions: body.instructions ?? [],
+      cookedAt: body.cooked ? new Date() : null,
     })
     .returning();
 
   return NextResponse.json({ recipe: inserted[0] });
+}
+
+/**
+ * PATCH /api/recipes/save
+ * Marks a saved recipe as cooked. Body: { id: number }
+ */
+export async function PATCH(request: Request) {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await request.json();
+  const recipeId: number = body.id;
+  if (!recipeId) {
+    return NextResponse.json({ error: "Recipe ID is required" }, { status: 400 });
+  }
+
+  const profile = await getProfile(userId);
+  if (!profile) {
+    return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+  }
+
+  await db
+    .update(savedRecipes)
+    .set({ cookedAt: new Date() })
+    .where(
+      and(eq(savedRecipes.id, recipeId), eq(savedRecipes.userId, profile.id))
+    );
+
+  return NextResponse.json({ success: true });
 }
 
 /**

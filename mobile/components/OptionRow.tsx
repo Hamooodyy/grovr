@@ -35,6 +35,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cta[100],
     borderWidth: 2,
     borderColor: colors.cta.DEFAULT,
+    // 1px thicker border per side → 1px less padding, so selecting never changes the size
+    paddingVertical: 13,
+    paddingHorizontal: 17,
   },
   label: {
     fontFamily: fonts.body,

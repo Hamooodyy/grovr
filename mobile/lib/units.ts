@@ -14,6 +14,7 @@ const UNIT_ALIASES: Record<string, string> = {
   quart: "quart", quarts: "quart",
   gallon: "gallon", gallons: "gallon",
   milliliter: "mL", milliliters: "mL", ml: "mL",
+  liter: "L", liters: "L", litre: "L", litres: "L", l: "L",
   clove: "clove", cloves: "clove",
   slice: "slice", slices: "slice",
   can: "can", cans: "can",
@@ -47,6 +48,7 @@ const VOLUME_TO_ML: Record<string, number> = {
   pint: 473.176,
   quart: 946.353,
   gallon: 3785.41,
+  L: 1000,
 };
 
 const COUNT_TO_CT: Record<string, number> = {

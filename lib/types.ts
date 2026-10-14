@@ -43,6 +43,7 @@ export type PantryUnit =
   | "pint"
   | "gallon"
   | "mL"
+  | "L"
   | "ct"
   | "dozen"
   | "pack"

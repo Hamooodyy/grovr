@@ -9,14 +9,16 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "http://localhost:3000"
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://staging.grovr.app",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_YnJhdmUtdG9ydG9pc2UtNzAuY2xlcmsuYWNjb3VudHMuZGV2JA"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "node": "24.14.0",
@@ -24,7 +26,8 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://grovr.app",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuZ3JvdnIuYXBwJA"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {
