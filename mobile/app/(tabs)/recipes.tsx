@@ -162,7 +162,8 @@ export default function RecipesScreen() {
     try {
       const token = await getTokenRef.current();
       if (!token) return;
-      const data = await suggestRecipes(token);
+      const exclude = recipes.map((r) => r.title);
+      const data = await suggestRecipes(token, { exclude });
       finishLoadingAnimation();
       await new Promise((r) => setTimeout(r, 400));
       setRecipes(data.recipes);

@@ -133,6 +133,7 @@ RULES:
 - Mark each ingredient as inPantry: true if it matches something in the inventory above, false if they need to buy it
 - Include a good variety — different cuisines, proteins, and cooking styles
 - Keep it practical — home cooking, not restaurant-level
+- Be creative — put a fresh spin on familiar dishes. Vary flavor profiles, spice levels, and techniques so each batch feels different from the last
 
 RECIPE MIX (critical):
 - Recipes 1-${Math.floor(recipeCount / 2)}: PANTRY recipes. Build these around what's in the kitchen inventory above. Use as many existing ingredients as possible, and only add a few extras
@@ -172,7 +173,7 @@ Return ONLY valid JSON matching this schema:
       model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },
-      temperature: 0.8,
+      temperature: 1.0,
       max_tokens: recipeCount === 1 ? 1000 : 3000,
     });
 
