@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 15.0.0"
+    "version": ">= 15.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -18,8 +19,9 @@
       }
     },
     "production": {
+      "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.grovr.app",
+        "EXPO_PUBLIC_API_URL": "https://grovr.app",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuZ3JvdnIuYXBwJA"
       }
     }
@@ -27,9 +29,7 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "ahmadnayfeh092@gmail.com",
-        "ascAppId": "",
-        "appleTeamId": ""
+        "appleId": "ahmadnayfeh092@gmail.com"
       }
     }
   }

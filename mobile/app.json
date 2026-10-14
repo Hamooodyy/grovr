@@ -9,7 +9,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.grovr.mobile"
+      "bundleIdentifier": "app.grovr.mobile",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "experiments": {
       "typedRoutes": true
@@ -18,7 +21,16 @@
       "expo-router",
       "expo-status-bar",
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#f5ead8"
+        }
+      ]
     ]
   }
 }
