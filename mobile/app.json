@@ -10,6 +10,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.grovr.mobile",
+      "deploymentTarget": "17.0",
       "config": {
         "usesNonExemptEncryption": false
       }
