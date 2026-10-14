@@ -431,7 +431,7 @@ export default function PantryScreen() {
           <Pressable style={styles.sheetBackdrop} onPress={() => setEditingItem(null)} />
           <View style={styles.sheetContent}>
             <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>{editingItem?.name ?? "Edit"}</Text>
+            <Text style={styles.sheetTitle}>{editingItem ? `Edit: ${editingItem.name}` : "Edit"}</Text>
             <View style={styles.editCategoryRow}>
               {CATEGORY_ORDER.map((cat) => (
                 <Chip
