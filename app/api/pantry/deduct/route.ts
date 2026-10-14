@@ -18,15 +18,17 @@ const STAPLES = new Set([
 
 type PantryRow = typeof pantryItems.$inferSelect;
 
-/** Finds the kitchen item for a recipe ingredient: exact name, then singular/plural, then partial. */
-function findMatch(canonical: string, items: PantryRow[]): PantryRow | undefined {
+const clean = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
+
+/** Finds the kitchen item for a recipe ingredient (case-insensitive): exact, then singular/plural, then partial. */
+function findMatch(ingredientName: string, items: PantryRow[]): PantryRow | undefined {
+  const target = clean(ingredientName);
   const singular = (s: string) => (s.endsWith("s") ? s.slice(0, -1) : s);
+  const names = items.map((item) => ({ item, name: clean(item.canonicalName) }));
   return (
-    items.find((item) => item.canonicalName === canonical) ??
-    items.find((item) => singular(item.canonicalName) === singular(canonical)) ??
-    items.find(
-      (item) => item.canonicalName.includes(canonical) || canonical.includes(item.canonicalName)
-    )
+    names.find((n) => n.name === target)?.item ??
+    names.find((n) => singular(n.name) === singular(target))?.item ??
+    names.find((n) => n.name.includes(target) || target.includes(n.name))?.item
   );
 }
 
@@ -63,7 +65,7 @@ export async function POST(request: Request) {
 
   // Staples aren't deducted
   const toDeduct = ingredients.filter(
-    (ing) => !STAPLES.has(ing.name.toLowerCase().trim())
+    (ing) => !STAPLES.has(clean(ing.name))
   );
 
   const userItems = await db
@@ -76,8 +78,7 @@ export async function POST(request: Request) {
   const skipped: Array<{ name: string; pantryUnit: string | null; recipeUnit: string }> = [];
 
   for (const ing of toDeduct) {
-    const canonical = ing.name.toLowerCase().trim();
-    const match = findMatch(canonical, userItems);
+    const match = findMatch(ing.name, userItems);
     if (!match) continue;
 
     // Null quantity means 0 — remove the item

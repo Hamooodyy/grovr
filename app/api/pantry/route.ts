@@ -92,7 +92,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Quantity is required" }, { status: 400 });
   }
 
-  const canonicalName = name.toLowerCase();
+  const canonicalName = name.toLowerCase().replace(/\s+/g, " ");
   const category: PantryCategory = body.category ?? inferCategory(canonicalName);
   const addedAt = new Date();
   const estimatedExpiry = computeExpiry(addedAt, canonicalName, category);

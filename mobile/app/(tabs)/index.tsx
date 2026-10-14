@@ -21,6 +21,7 @@ import { Tag } from "../../components/Tag";
 import { Card } from "../../components/Card";
 import { Button } from "../../components/Button";
 import { Toast } from "../../components/Toast";
+import { countKitchenMatches } from "../../lib/ingredients";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -237,8 +238,8 @@ export default function HomeScreen() {
               </View>
             )}
             {recipes.map((recipe) => {
-              const inKitchen = recipe.ingredients.filter((i) => i.inPantry).length;
-              const needMore = recipe.ingredients.filter((i) => !i.inPantry).length;
+              // Counts from the live kitchen (same rules as Recipes and recipe detail)
+              const { inKitchen, need: needMore } = countKitchenMatches(recipe.ingredients, pantry);
               return (
                 <Pressable
                   key={recipe.title}

@@ -22,12 +22,10 @@ import {
   getShoppingList,
   addToShoppingList,
   addPantryItem,
-  deductPantryItems,
   toggleShoppingItem,
   deleteShoppingItem,
   clearCheckedItems,
   type ShoppingListItem,
-  type RecipeIngredient,
 } from "../../lib/api";
 import { colors, fonts, type as typ, radii, layout } from "../../lib/theme";
 import { Button } from "../../components/Button";
@@ -213,7 +211,7 @@ export default function ShopScreen() {
     }
   }
 
-  // "Bought & cooked" — skip kitchen add (net zero), deduct existing pantry items, clear section
+  // "Bought & cooked" — bought and used right away, so the kitchen doesn't change; just clear the section
   async function handleBoughtAndCooked(sectionItems: ShoppingListItem[]) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const ids = new Set(sectionItems.map((i) => i.id));
@@ -221,15 +219,6 @@ export default function ShopScreen() {
     try {
       const token = await getTokenRef.current();
       if (!token) return;
-      // Build ingredient list for deduction (items already in pantry that were used)
-      const ingredients: RecipeIngredient[] = sectionItems.map((i) => ({
-        name: i.name,
-        quantity: i.quantity ?? "1",
-        unit: i.unit ?? "ct",
-        inPantry: false, // these were bought, not from pantry — deduct handles "inPantry" items only
-      }));
-      // Deduct will only touch items marked inPantry, so this is safe
-      await deductPantryItems(token, ingredients);
       // Delete from shopping list
       await Promise.all(sectionItems.map((i) => deleteShoppingItem(token, i.id)));
       setToast("Done. Enjoy your meal.");

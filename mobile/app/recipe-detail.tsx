@@ -19,7 +19,7 @@ import {
   markRecipeCooked,
 } from "../lib/api";
 import { colors, fonts, type as typ, radii, layout } from "../lib/theme";
-import { normalizeUnit, hasEnough } from "../lib/units";
+import { getIngredientStatus, type IngredientStatus } from "../lib/ingredients";
 import { Tag } from "../components/Tag";
 import { Button } from "../components/Button";
 import { Toast } from "../components/Toast";
@@ -44,6 +44,7 @@ export default function RecipeDetailScreen() {
   const [addingToList, setAddingToList] = useState(false);
   const [cooking, setCooking] = useState(false);
   const [pantryItems, setPantryItems] = useState<PantryItemResponse[]>([]);
+  const [pantryLoaded, setPantryLoaded] = useState(false);
 
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
@@ -56,6 +57,7 @@ export default function RecipeDetailScreen() {
         if (!token) return;
         const data = await getPantryItems(token);
         setPantryItems(data.items);
+        setPantryLoaded(true);
       } catch { /* ignore */ }
     }
     loadPantry();
@@ -77,32 +79,16 @@ export default function RecipeDetailScreen() {
     );
   }
 
-  // Recompute inPantry from live pantry data — checks quantity, not just existence
-  function findPantryMatch(name: string) {
-    const lower = name.toLowerCase().trim();
-    return pantryItems.find((p) => {
-      const pName = (p.canonicalName ?? p.name).toLowerCase().trim();
-      return pName === lower || pName.includes(lower) || lower.includes(pName);
-    });
-  }
-
+  // Status from the live kitchen; until it loads, fall back to the LLM's guess
   const ingredients = (recipe.ingredients ?? []).map((ing) => {
-    const match = findPantryMatch(ing.name);
-    const inPantry = match
-      ? hasEnough(match.quantity, match.unit, ing.quantity, ing.unit)
-      : ing.inPantry && pantryItems.length === 0; // fall back to LLM value only if no pantry loaded
-    return { ...ing, inPantry };
+    if (!pantryLoaded) {
+      return { ...ing, status: (ing.inPantry ? "have" : "missing") as IngredientStatus, match: undefined };
+    }
+    return { ...ing, ...getIngredientStatus(ing, pantryItems) };
   });
 
-  const inKitchen = ingredients.filter((i) => i.inPantry);
-  const needToBuy = ingredients.filter((i) => !i.inPantry);
-
-  // Check for unit mismatches between recipe and pantry
-  function hasUnitMismatch(ingredientName: string, recipeUnit: string): boolean {
-    const match = findPantryMatch(ingredientName);
-    if (!match || !match.unit || !recipeUnit) return false;
-    return normalizeUnit(match.unit) !== normalizeUnit(recipeUnit);
-  }
+  const inKitchen = ingredients.filter((i) => i.status === "have" || i.status === "unit_mismatch");
+  const needToBuy = ingredients.filter((i) => i.status === "not_enough" || i.status === "missing");
 
   async function handleAddMissing() {
     setAddingToList(true);
@@ -181,7 +167,7 @@ export default function RecipeDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>In your kitchen</Text>
             {inKitchen.map((ing, i) => {
-              const mismatch = hasUnitMismatch(ing.name, ing.unit);
+              const mismatch = ing.status === "unit_mismatch";
               return (
                 <View key={i}>
                   <View style={styles.haveRow}>
@@ -221,16 +207,30 @@ export default function RecipeDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>You'll need to buy</Text>
             {needToBuy.map((ing, i) => (
-              <View key={i} style={styles.needRow}>
-                <Plus
-                  size={17}
-                  strokeWidth={2.75}
-                  color={colors.accent[800]}
-                />
-                <Text style={styles.needLabel}>{ing.name}</Text>
-                <Text style={styles.needQty}>
-                  {ing.quantity} {ing.unit}
-                </Text>
+              <View key={i}>
+                <View style={styles.needRow}>
+                  <Plus
+                    size={17}
+                    strokeWidth={2.75}
+                    color={colors.accent[800]}
+                  />
+                  <Text style={styles.needLabel}>{ing.name}</Text>
+                  <Text style={styles.needQty}>
+                    {ing.quantity} {ing.unit}
+                  </Text>
+                </View>
+                {ing.status === "not_enough" && ing.match && (
+                  <View style={styles.mismatchRow}>
+                    <AlertTriangle
+                      size={13}
+                      strokeWidth={2.75}
+                      color={colors.accent[700]}
+                    />
+                    <Text style={styles.mismatchText}>
+                      Not enough · you have {ing.match.quantity} {ing.match.unit}
+                    </Text>
+                  </View>
+                )}
               </View>
             ))}
           </View>
